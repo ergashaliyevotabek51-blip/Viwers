@@ -1,2 +1,2 @@
-python-telegram-bot==20.7  # yoki aiogram==3.13.1, pyTelegramBotAPI==4.22.1 — sizning kutubxonangiz
-pydantic==2.5.3            # <-- shuni qo'shing yoki o'zgartiring (eng barqaror)
+python-telegram-bot==20.7
+pydantic>=2.9.0   # yoki ==2.9.2
