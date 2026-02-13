@@ -1,227 +1,217 @@
 import os
 import json
-from datetime import datetime
 import requests
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, Update
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
 
 # ================= CONFIG =================
-TOKEN = os.environ.get("8370792264:AAFH3P9qZPkHQFRBnxjxolGMILTRhYexDb0")
-ADMIN_ID = 774440841
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
+HF_TOKEN = os.getenv("HF_TOKEN")
 BOT_USERNAME = "UzbekFilmTV_bot"
 
 MOVIES_FILE = "movies.json"
 USERS_FILE = "users.json"
-
-HF_TOKEN = "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"  # Hugging Face tokeningiz
 AI_MODEL = "HuggingFaceH4/zephyr-7b-beta"
 
-# ================= PROXY =================
-PROXY = "socks4://142.54.231.38:4145"  
 # ================= FILE SYSTEM =================
-def load_movies():
+def load_data(file):
     try:
-        with open(MOVIES_FILE, "r") as f:
+        with open(file, "r") as f:
             return json.load(f)
     except:
         return {}
 
-def save_movies(data):
-    with open(MOVIES_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-def load_users():
-    try:
-        with open(USERS_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_users(data):
-    with open(USERS_FILE, "w") as f:
+def save_data(file, data):
+    with open(file, "w") as f:
         json.dump(data, f, indent=2)
 
 def is_admin(user_id):
     return user_id == ADMIN_ID
 
-# ================= AI FUNCTION =================
-def ask_ai(user_name, text):
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}"
-    }
-
-    prompt = f"""
-Assalomu alaykum va rohmatullohi va barokatuhu, {user_name}!
-
-Siz UzbekFilmTV AI bilan suhbatdasiz.
-Savol: {text}
-Javob:
-"""
-
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": 200
-        }
-    }
+# ================= AI =================
+def ask_ai(text):
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    payload = {"inputs": text, "parameters": {"max_new_tokens": 200}}
 
     try:
-        response = requests.post(
+        r = requests.post(
             f"https://api-inference.huggingface.co/models/{AI_MODEL}",
             headers=headers,
             json=payload,
-            timeout=30  # timeout qo'shdim, uzoq kutmasin
+            timeout=30,
         )
-        if response.status_code == 200:
-            return response.json()[0]["generated_text"].strip()
-        else:
-            return f"⚠️ AI xatosi: {response.status_code} - {response.text}"
-    except Exception as e:
-        return f"⚠️ AI ulanish xatosi: {str(e)}"
-
-# ================= APPLICATION + PROXY =================
-application = Application.builder() \
-    .token(TOKEN) \
-    .proxy(PROXY) \
-    .get_updates_proxy(PROXY) \
-    .build()
+        if r.status_code == 200:
+            return r.json()[0]["generated_text"]
+        return "⚠️ AI vaqtincha ishlamayapti."
+    except:
+        return "⚠️ AI ulanish xatosi."
 
 # ================= START =================
-@application.add_handler(CommandHandler("start"))
-async def start(update, context):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    users = load_data(USERS_FILE)
     user_id = str(update.effective_user.id)
-    users = load_users()
 
-    ref = update.message.text.split(" ")
-    ref_id = ref[1] if len(ref) > 1 else None
+    args = context.args
+    ref = args[0] if args else None
 
     if user_id not in users:
-        users[user_id] = {"used": 0, "referrals": 0, "invited_by": ref_id}
-        if ref_id and ref_id in users:
-            users[ref_id]["referrals"] += 1
-        save_users(users)
+        users[user_id] = {"used": 0, "referrals": 0}
+        if ref and ref in users and ref != user_id:
+            users[ref]["referrals"] += 1
+        save_data(USERS_FILE, users)
 
-    name = update.effective_user.first_name
-    text = (
-        f"🤲 Assalomu alaykum va rohmatullohi va barokatuhu, {name}!\n\n"
-        "🎬 UzbekFilmTV rasmiy ravishda ishga tushdi!\n\n"
-        "✨ Eng sara o'zbek filmlari shu yerda.\n"
-        "📥 Kino olish uchun kod yuboring.\n\n"
-        "📌 Masalan: 12"
-    )
+    text = "🎬 UzbekFilmTV ga xush kelibsiz!\n\nKod yuboring."
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🤖 UzbekFilmTV AI", callback_data="ai")]
-    ]) if not is_admin(update.effective_user.id) else InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛠 Admin Panel", callback_data="admin")],
-        [InlineKeyboardButton(text="🤖 UzbekFilmTV AI", callback_data="ai")]
-    ])
+    if is_admin(update.effective_user.id):
+        kb = [
+            [InlineKeyboardButton("🛠 Admin Panel", callback_data="admin")],
+            [InlineKeyboardButton("🤖 AI", callback_data="ai")]
+        ]
+    else:
+        kb = [[InlineKeyboardButton("🤖 AI", callback_data="ai")]]
 
-    await update.message.reply_text(text, reply_markup=kb)
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
 
 # ================= ADMIN PANEL =================
-@application.add_handler(CallbackQueryHandler(pattern="^admin$"))
-async def admin_panel(update, context):
-    query = update.callback_query
-    await query.answer()
-    if not is_admin(query.from_user.id):
-        return
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Kod qo‘shish", callback_data="add")],
-        [InlineKeyboardButton(text="➖ Kod o‘chirish", callback_data="delete")],
-        [InlineKeyboardButton(text="📊 Statistika", callback_data="stats")],
-        [InlineKeyboardButton(text="📢 Broadcast", callback_data="broadcast")],
-    ])
+    kb = [
+        [InlineKeyboardButton("➕ Kod qo‘shish", callback_data="add")],
+        [InlineKeyboardButton("➖ Kod o‘chirish", callback_data="delete")],
+        [InlineKeyboardButton("📊 Referal Statistika", callback_data="stats")],
+        [InlineKeyboardButton("🔙 Orqaga", callback_data="back")]
+    ]
 
-    await query.edit_message_text("🛠 Admin Panel", reply_markup=kb)
+    await update.callback_query.edit_message_text(
+        "🛠 ADMIN PANEL",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+
+# ================= ADD =================
+async def add_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    context.user_data["mode"] = "add_code"
+    await update.callback_query.message.reply_text("Yangi kod kiriting:")
+
+# ================= DELETE =================
+async def delete_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    context.user_data["mode"] = "delete_code"
+    await update.callback_query.message.reply_text("O‘chirish uchun kod kiriting:")
+
+# ================= STATS =================
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    users = load_data(USERS_FILE)
+
+    total = len(users)
+    sorted_users = sorted(users.items(), key=lambda x: x[1]["referrals"], reverse=True)
+
+    text = f"📊 REFERAL STATISTIKA\n\n👥 Jami: {total}\n\n🏆 Top 5:\n"
+    for i, (uid, data) in enumerate(sorted_users[:5], 1):
+        text += f"{i}. {uid} — {data['referrals']} ta\n"
+
+    await update.callback_query.edit_message_text(text)
 
 # ================= AI PANEL =================
-@application.add_handler(CallbackQueryHandler(pattern="^ai$"))
-async def ai_panel(update, context):
-    query = update.callback_query
-    await query.answer()
-    await query.message.reply_text("🤖 UzbekFilmTV AI ga xush kelibsiz!\n\nSavolingizni yozing...")
+async def ai_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    context.user_data["mode"] = "ai"
+    await update.callback_query.message.reply_text("🤖 Savolingizni yozing:")
 
-# ================= HANDLE ALL MESSAGES =================
-@application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND))
-async def handle_all(update, context):
-    msg = update.message
-    user_id = str(msg.from_user.id)
-    users = load_users()
-    movies = load_movies()
+# ================= BACK =================
+async def back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    context.user_data.clear()
+    await start(update, context)
 
-    if user_id not in users:
+# ================= TEXT HANDLER =================
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    users = load_data(USERS_FILE)
+    movies = load_data(MOVIES_FILE)
+    user_id = str(update.effective_user.id)
+
+    mode = context.user_data.get("mode")
+
+    # ADD
+    if mode == "add_code":
+        context.user_data["new_code"] = text
+        context.user_data["mode"] = "add_value"
+        await update.message.reply_text("Video file_id kiriting:")
         return
 
-    text = msg.text.strip()
-
-    # AI so'rov (ai bilan boshlansa)
-    if text.lower().startswith("ai "):
-        question = text[3:].strip()
-        name = msg.from_user.first_name
-
-        await msg.reply_text("🤖 AI o‘ylayapti...")
-
-        answer = ask_ai(name, question)
-        await msg.reply_text(answer)
+    if mode == "add_value":
+        movies[context.user_data["new_code"]] = text
+        save_data(MOVIES_FILE, movies)
+        context.user_data.clear()
+        await update.message.reply_text("✅ Saqlandi!")
         return
 
-    # DELETE (admin)
-    if is_admin(msg.from_user.id) and text.startswith("del "):
-        code = text.replace("del ", "").strip()
-        if code in movies:
-            del movies[code]
-            save_movies(movies)
-            await msg.reply_text("🗑 O‘chirildi")
+    # DELETE
+    if mode == "delete_code":
+        if text in movies:
+            del movies[text]
+            save_data(MOVIES_FILE, movies)
+            await update.message.reply_text("🗑 O‘chirildi!")
         else:
-            await msg.reply_text("❌ Topilmadi")
+            await update.message.reply_text("❌ Topilmadi!")
+        context.user_data.clear()
         return
 
-    # MOVIE SYSTEM
+    # AI
+    if mode == "ai":
+        await update.message.reply_text("🤖 AI o‘ylayapti...")
+        answer = ask_ai(text)
+        await update.message.reply_text(answer)
+        return
+
+    # MOVIE
     if text in movies:
         if users[user_id]["used"] >= 5 and users[user_id]["referrals"] < 3:
             link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-            await msg.reply_text(
+            await update.message.reply_text(
                 "🔒 5 ta kino ishlatildi!\n\n"
-                "🎁 Yana ochish uchun 3 ta do‘st taklif qiling.\n\n"
-                f"🔗 Sizning havolangiz:\n{link}"
+                "3 ta do‘st taklif qiling.\n\n"
+                f"Sizning link:\n{link}"
             )
             return
 
         users[user_id]["used"] += 1
-        save_users(users)
+        save_data(USERS_FILE, users)
 
-        val = movies[text]
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔎 Qidirish", url=f"https://t.me/{BOT_USERNAME}")]
-        ])
-
-        if val.startswith("http"):
-            parts = val.split("/")
-            chat_id = int("-100" + parts[-2])
-            message_id = int(parts[-1])
-            await context.bot.copy_message(
-                chat_id=msg.chat.id,
-                from_chat_id=chat_id,
-                message_id=message_id,
-                reply_markup=kb
-            )
-        else:
-            await msg.reply_video(
-                video=val,
-                caption="🎬 Kino tayyor! Ulashing do‘stlaringizga 💎",
-                reply_markup=kb
-            )
+        await update.message.reply_video(
+            video=movies[text],
+            caption="🎬 Kino tayyor!"
+        )
         return
 
-    await msg.reply_text("❌ Bunday kod topilmadi")
+    await update.message.reply_text("❌ Kod topilmadi")
 
 # ================= MAIN =================
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(admin_panel, pattern="admin"))
+    app.add_handler(CallbackQueryHandler(add_code, pattern="add"))
+    app.add_handler(CallbackQueryHandler(delete_code, pattern="delete"))
+    app.add_handler(CallbackQueryHandler(stats, pattern="stats"))
+    app.add_handler(CallbackQueryHandler(ai_panel, pattern="ai"))
+    app.add_handler(CallbackQueryHandler(back, pattern="back"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    print("Bot ishga tushdi...")
+    app.run_polling()
+
 if __name__ == "__main__":
-    print("Bot polling boshlanmoqda... (Proxy bilan)")
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        bootstrap_retries=-1
-    )
+    main()
