@@ -1,2 +1,2 @@
-python-telegram-bot[socks]==20.7
-pydantic>=2.9.0   # yoki ==2.9.2
+python-telegram-bot==20.7
+requests
