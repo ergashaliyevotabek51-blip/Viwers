@@ -6,14 +6,14 @@ from aiogram.filters import Command
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN topilmadi!")
+    raise RuntimeError("BOT_TOKEN yo‘q")
 
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
 @dp.message(Command("start"))
-async def start_handler(message: types.Message):
-    await message.answer("🤲 Assalomu alaykum!\n\nBot ishlayapti ✅")
+async def start(message: types.Message):
+    await message.answer("🤲 Assalomu alaykum! Bot ishlayapti ✅")
 
 async def main():
     await dp.start_polling(bot)
