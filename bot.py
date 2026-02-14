@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime
+from urllib.parse import quote
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -20,7 +21,7 @@ USERS_FILE = "users.json"
 MOVIES_FILE = "movies.json"
 
 FREE_LIMIT = 5
-REF_LIMIT = 5  # har bir referral uchun +5 limit (sizning so‘rovingiz bo‘yicha)
+REF_LIMIT = 5  # har bir referral uchun +5 limit
 
 # ================= FILE UTILS =================
 def load_json(path, default):
@@ -78,16 +79,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_json(USERS_FILE, users)
 
     text = (
-        f"🎬 Assalomu alaykum, {user.first_name}!\n\n"
-        f"📩 Kino olish uchun kod yuboring.\n\n"
-        f"🎁 Limit: {me['used']}/{max_limit(me)}"
+        f"<b>Assalomu alaykum, {user.first_name}!</b> 👋\n\n"
+        f"🎬 <b>UzbekFilmTV</b> — eng sara o‘zbek filmlari shu yerdagi bot!\n\n"
+        f"🔥 <b>Qanday ishlaydi?</b>\n"
+        f"• Kod yuboring (masalan: 12, 45, 107) → kino darhol keladi\n"
+        f"• Bepul limit: <b>5 ta kino</b>\n"
+        f"• Har bir do‘st taklif qilsangiz → +5 ta limit qo‘shiladi\n\n"
+        f"🚀 <b>Tayyormisiz?</b> Kodni yuboring yoki do‘stlaringizni taklif qiling!"
     )
 
     kb = []
     if is_admin(user.id):
         kb.append([InlineKeyboardButton("🛠 Admin panel", callback_data="admin")])
 
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb) if kb else None)
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb) if kb else None, parse_mode="HTML")
 
 # ================= ADMIN PANEL =================
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -107,7 +112,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text("🛠 Admin panel", reply_markup=InlineKeyboardMarkup(kb))
         return
 
-    # Broadcast rejimi
     if q.data == "broadcast":
         context.user_data["mode"] = "broadcast"
         await q.message.reply_text(
@@ -116,7 +120,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Add/Delete/Stats
     if q.data in ["add", "delete"]:
         context.user_data["mode"] = q.data
         if q.data == "add":
@@ -145,6 +148,28 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "/cancel":
         context.user_data.clear()
         await msg.reply_text("❌ Bekor qilindi")
+        return
+
+    # Admin userga limit qo‘shish
+    if is_admin(user_id) and text.startswith("limit "):
+        try:
+            _, target_uid, extra = text.split()
+            target_uid = str(target_uid)
+            extra = int(extra)
+
+            if target_uid in users:
+                users[target_uid]["referrals"] += extra // REF_LIMIT
+                save_json(USERS_FILE, users)
+                new_max = max_limit(users[target_uid])
+                await msg.reply_text(
+                    f"User {target_uid} ga qo‘shimcha limit berildi!\n"
+                    f"Yangi referrals: {users[target_uid]['referrals']}\n"
+                    f"Jami limit: {new_max}"
+                )
+            else:
+                await msg.reply_text("Bunday user topilmadi")
+        except:
+            await msg.reply_text("Format noto‘g‘ri!\nMisol: limit 123456789 15")
         return
 
     # Broadcast
@@ -187,9 +212,24 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text in movies:
         if user["used"] >= max_limit(user):
             ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+            share_text = (
+                f"Eng zo‘r o‘zbek filmlari shu botda! 🔥\n"
+                f"Bepul 5 ta kino + har bir do‘st uchun +5 ta limit!\n\n"
+                f"{ref_link}"
+            )
+            share_url = f"https://t.me/share/url?url={quote(ref_link)}&text={quote(share_text)}"
+
+            kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("👥 Do‘stlarga ulashish", url=share_url)
+            ]])
+
             await msg.reply_text(
-                f"❌ Limit tugadi!\n\n"
-                f"🔗 Referral havola:\n{ref_link}"
+                f"🔒 Limit tugadi!\n\n"
+                f"Qolgan: 0/{max_limit(user)}\n"
+                f"Do‘stlar soni: {user['referrals']}\n\n"
+                f"Yana ko‘proq kino uchun do‘stlaringizni taklif qiling!",
+                reply_markup=kb,
+                disable_web_page_preview=True
             )
             return
 
@@ -226,7 +266,7 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("cancel", cancel_broadcast))  # agar cancel funksiyasi bo‘lmasa, quyidagi qatorni qo‘shing
+    app.add_handler(CommandHandler("cancel", cancel_broadcast))
     app.add_handler(CallbackQueryHandler(admin_panel))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
