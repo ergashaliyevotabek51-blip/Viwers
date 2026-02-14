@@ -11,8 +11,8 @@ from telegram.ext import (
 )
 
 # ================= CONFIG =================
-TOKEN = os.getenv("BOT_TOKEN")  # Railway Variables'da bo'ladi
-ADMIN_ID = 774440841  # o'zingning Telegram ID
+TOKEN = os.getenv("BOT_TOKEN")  # Railway Variables
+ADMIN_ID = 774440841  # O'Z TELEGRAM IDING
 
 USERS_FILE = "users.json"
 MOVIES_FILE = "movies.json"
@@ -41,8 +41,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_json(USERS_FILE, users)
 
     text = (
-        f"🤲 Assalomu alaykum, {user.first_name}!\n\n"
-        "🎬 UzbekFilmTV botiga xush kelibsiz.\n\n"
+        f"🤲 Assalomu alaykum va rohmatullohi va barokatuhu, {user.first_name}!\n\n"
+        "🎬 UzbekFilmTV botiga xush kelibsiz!\n\n"
         "📩 Kino olish uchun kod yuboring.\n"
         "Masalan: 12"
     )
@@ -51,8 +51,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_admin(user.id):
         keyboard.append([InlineKeyboardButton("🛠 Admin panel", callback_data="admin")])
 
-    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-    await update.message.reply_text(text, reply_markup=reply_markup)
+    await update.message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None,
+    )
 
 # ================= ADMIN PANEL =================
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -90,9 +92,11 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(
             "📝 Kino qo‘shish:\n\n"
             "Format:\n"
-            "`kod|file_id`\n\n"
+            "`kod|file_id yoki kanal post link`\n\n"
             "Masalan:\n"
-            "`12|BAACAgIA...`",
+            "`12|BAACAgIA...`\n"
+            "yoki\n"
+            "`12|https://t.me/c/3695159513/5`",
             parse_mode="Markdown",
         )
 
@@ -125,8 +129,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Format noto‘g‘ri.")
             return
 
-        code, file_id = text.split("|", 1)
-        movies[code.strip()] = file_id.strip()
+        code, value = text.split("|", 1)
+        movies[code.strip()] = value.strip()
         save_json(MOVIES_FILE, movies)
 
         context.user_data.clear()
@@ -146,8 +150,31 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ===== USER MOVIE =====
     if text in movies:
+        value = movies[text]
+
+        # AGAR KANAL POST LINK BO‘LSA
+        if value.startswith("https://t.me/c/"):
+            try:
+                parts = value.replace("https://t.me/c/", "").split("/")
+                channel_id = int("-100" + parts[0])
+                message_id = int(parts[1])
+
+                await context.bot.copy_message(
+                    chat_id=update.message.chat_id,
+                    from_chat_id=channel_id,
+                    message_id=message_id,
+                    caption="🎬 Kino tayyor! Yoqimli tomosha 🍿",
+                )
+            except:
+                await update.message.reply_text(
+                    "❌ Kanal postini yuborib bo‘lmadi.\n"
+                    "Bot kanalga admin ekanini tekshiring!"
+                )
+            return
+
+        # FILE_ID
         await update.message.reply_video(
-            video=movies[text],
+            video=value,
             caption="🎬 Kino tayyor! Yoqimli tomosha 🍿",
         )
         return
