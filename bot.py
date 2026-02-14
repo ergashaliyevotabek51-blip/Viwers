@@ -15,7 +15,7 @@ from telegram.ext import (
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 774440841
-BOT_USERNAME = "UzbekFilmTV_bot"  # ← BU YERNI O‘Z BOT USERNAME’INGIZGA O‘ZGARTIRING!
+BOT_USERNAME = "UzbekFilmTV_bot"  # ← O‘Z BOT USERNAME’INGIZNI YOZING!
 
 USERS_FILE = "users.json"
 MOVIES_FILE = "movies.json"
@@ -115,7 +115,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if q.data == "broadcast":
         context.user_data["mode"] = "broadcast"
         await q.message.reply_text(
-            "📢 Endi yuborgan xabaringiz (matn, rasm, video, audio...) hammaga jo'natiladi.\n"
+            "📢 Endi yuborgan xabaringiz (matn, rasm, video, audio, hujjat...) hammaga jo'natiladi.\n"
             "Bekor qilish uchun /cancel yozing."
         )
         return
@@ -172,16 +172,55 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Format noto‘g‘ri!\nMisol: limit 123456789 15")
         return
 
-    # Broadcast
+    # Broadcast — forward emas, bot nomi bilan yuborish
     if is_admin(user_id) and mode == "broadcast":
         success = 0
+        total = len(users)
+
         for uid_str in users:
             try:
-                await msg.forward(chat_id=int(uid_str))
+                uid = int(uid_str)
+
+                if msg.text:
+                    await context.bot.send_message(uid, msg.text)
+
+                elif msg.photo:
+                    await context.bot.send_photo(
+                        uid,
+                        photo=msg.photo[-1].file_id,
+                        caption=msg.caption or "UzbekFilmTV dan yangilik!"
+                    )
+
+                elif msg.video:
+                    await context.bot.send_video(
+                        uid,
+                        video=msg.video.file_id,
+                        caption=msg.caption or "UzbekFilmTV dan yangilik!"
+                    )
+
+                elif msg.audio:
+                    await context.bot.send_audio(
+                        uid,
+                        audio=msg.audio.file_id,
+                        caption=msg.caption or "UzbekFilmTV dan yangilik!"
+                    )
+
+                elif msg.document:
+                    await context.bot.send_document(
+                        uid,
+                        document=msg.document.file_id,
+                        caption=msg.caption or "UzbekFilmTV dan yangilik!"
+                    )
+
+                else:
+                    # agar boshqa tur bo‘lsa copy qilamiz
+                    await context.bot.copy_message(uid, msg.chat_id, msg.message_id)
+
                 success += 1
             except:
                 pass
-        await msg.reply_text(f"✅ Yuborildi: {success}/{len(users)} userga")
+
+        await msg.reply_text(f"✅ Yuborildi: {success}/{total} userga")
         context.user_data.clear()
         return
 
