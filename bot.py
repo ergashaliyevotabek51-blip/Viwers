@@ -172,7 +172,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Format noto‘g‘ri!\nMisol: limit 123456789 15")
         return
 
-    # Broadcast — forward emas, bot nomi bilan yuborish
+    # Broadcast
     if is_admin(user_id) and mode == "broadcast":
         success = 0
         total = len(users)
@@ -183,39 +183,16 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 if msg.text:
                     await context.bot.send_message(uid, msg.text)
-
                 elif msg.photo:
-                    await context.bot.send_photo(
-                        uid,
-                        photo=msg.photo[-1].file_id,
-                        caption=msg.caption or "UzbekFilmTV dan yangilik!"
-                    )
-
+                    await context.bot.send_photo(uid, photo=msg.photo[-1].file_id, caption=msg.caption)
                 elif msg.video:
-                    await context.bot.send_video(
-                        uid,
-                        video=msg.video.file_id,
-                        caption=msg.caption or "UzbekFilmTV dan yangilik!"
-                    )
-
+                    await context.bot.send_video(uid, video=msg.video.file_id, caption=msg.caption)
                 elif msg.audio:
-                    await context.bot.send_audio(
-                        uid,
-                        audio=msg.audio.file_id,
-                        caption=msg.caption or "UzbekFilmTV dan yangilik!"
-                    )
-
+                    await context.bot.send_audio(uid, audio=msg.audio.file_id, caption=msg.caption)
                 elif msg.document:
-                    await context.bot.send_document(
-                        uid,
-                        document=msg.document.file_id,
-                        caption=msg.caption or "UzbekFilmTV dan yangilik!"
-                    )
-
+                    await context.bot.send_document(uid, document=msg.document.file_id, caption=msg.caption)
                 else:
-                    # agar boshqa tur bo‘lsa copy qilamiz
                     await context.bot.copy_message(uid, msg.chat_id, msg.message_id)
-
                 success += 1
             except:
                 pass
@@ -282,20 +259,37 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         ]])
 
-        cap = f"🎬 Kino tayyor 🍿\nQolgan: {user['used']}/{max_limit(user)}"
+        extra_text = (
+            f"🎬 Kino tayyor 🍿\n"
+            f"Qolgan: {user['used']}/{max_limit(user)}\n"
+            f"Bu bot orqali yuklandi"
+        )
 
         val = movies[text]
         if val.startswith("https://t.me/c/"):
             p = val.replace("https://t.me/c/", "").split("/")
+            channel_id = int("-100" + p[0])
+            msg_id = int(p[1])
+
+            # 1. Kanal xabarini asl holatida ko‘chirish (caption saqlanadi)
             await context.bot.copy_message(
                 chat_id=msg.chat_id,
-                from_chat_id=int("-100" + p[0]),
-                message_id=int(p[1]),
-                caption=cap,
+                from_chat_id=channel_id,
+                message_id=msg_id,
+                reply_markup=btn,
+                # caption bermaymiz → asl caption saqlanib qoladi
+            )
+
+            # 2. Qo‘shimcha ma'lumot alohida matn sifatida
+            await msg.reply_text(extra_text, reply_markup=btn)
+
+        else:
+            # To‘g‘ridan-to‘g‘ri file_id (video) bo‘lsa
+            await msg.reply_video(
+                video=val,
+                caption=extra_text,
                 reply_markup=btn
             )
-        else:
-            await msg.reply_video(video=val, caption=cap, reply_markup=btn)
         return
 
     await msg.reply_text("❌ Bunday kod topilmadi")
@@ -305,7 +299,7 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("cancel", cancel_broadcast))
+    app.add_handler(CommandHandler("cancel", lambda u,c: cancel_broadcast(u,c)))  # /cancel qo‘shildi
     app.add_handler(CallbackQueryHandler(admin_panel))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
