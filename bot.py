@@ -15,55 +15,113 @@ from telegram.ext import (
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 774440841
-BOT_USERNAME = "UzbekFilmTV_bot"  # ← O‘Z BOT USERNAME’INGIZNI YOZING!
+BOT_USERNAME = "UzbekFilmTv_bot"           # ← o‘zingizniki bilan almashtiring
 
-USERS_FILE = "users.json"
+USERS_FILE  = "users.json"
 MOVIES_FILE = "movies.json"
 
 FREE_LIMIT = 5
-REF_LIMIT = 5  # har bir referral uchun +5 limit
+REF_LIMIT  = 5   # har bir referral uchun +5 ta kino
 
-# ================= FILE UTILS =================
-def load_json(path, default):
-    if not os.path.exists(path):
-        return default
+# ================= USER FILE SAFE OPERATIONS =================
+
+def load_users() -> dict:
+    if not os.path.exists(USERS_FILE):
+        save_users({})
+        return {}
+
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return default
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        data = {}
 
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
+    # Eski list formatini aniqlash va dict ga aylantirish
+    if isinstance(data, list):
+        new_data = {}
+        now = datetime.utcnow().isoformat()
+        for old_id in data:
+            try:
+                uid = str(int(old_id))
+                new_data[uid] = {
+                    "used": 0,
+                    "referrals": 0,
+                    "joined": now,
+                    "refed": None
+                }
+            except:
+                continue
+        save_users(new_data)
+        return new_data
+
+    # Dict formatini tozalash / normallashtirish
+    cleaned = {}
+    for k, v in data.items():
+        if not isinstance(v, dict):
+            continue
+        try:
+            uid = str(int(k))  # faqat raqamli ID larni saqlaymiz
+            cleaned[uid] = {
+                "used": int(v.get("used", 0)),
+                "referrals": int(v.get("referrals", 0)),
+                "joined": v.get("joined", datetime.utcnow().isoformat()),
+                "refed": v.get("refed", None)
+            }
+        except:
+            continue
+
+    if cleaned != data:
+        save_users(cleaned)
+
+    return cleaned
+
+
+def save_users(data: dict):
+    # Hech qachon faylni o‘chirmaymiz, faqat yangilaymiz
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-def is_admin(user_id):
-    return user_id == ADMIN_ID
 
-def get_user(users, user_id):
+def get_user(users: dict, user_id: int) -> dict:
     uid = str(user_id)
     if uid not in users:
         users[uid] = {
             "used": 0,
             "referrals": 0,
-            "joined": datetime.now().isoformat(),
+            "joined": datetime.utcnow().isoformat(),
             "refed": None
         }
-        save_json(USERS_FILE, users)
+        save_users(users)
     return users[uid]
 
-def max_limit(user):
+
+def max_limit(user: dict) -> int:
     return FREE_LIMIT + user["referrals"] * REF_LIMIT
+
+
+# ================= ADMIN KEYBOARD (2×2) =================
+def get_admin_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("➕ Kino qo‘shish",    callback_data="admin_add_movie"),
+            InlineKeyboardButton("➖ Kino o‘chirish",   callback_data="admin_delete_movie"),
+        ],
+        [
+            InlineKeyboardButton("📃 Kinolar ro‘yxati", callback_data="admin_list_movies"),
+            InlineKeyboardButton("📊 Statistika",       callback_data="admin_stats"),
+        ],
+    ])
+
 
 # ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     args = context.args
 
-    users = load_json(USERS_FILE, {})
+    users = load_users()
     me = get_user(users, user.id)
 
-    # Referral
+    # Referral logikasi
     if args and args[0].isdigit():
         ref_id = args[0]
         if ref_id != str(user.id) and ref_id in users and me["refed"] is None:
@@ -72,243 +130,184 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(
                     int(ref_id),
-                    f"🎉 Yangi do‘st kirdi!\nReferral: {users[ref_id]['referrals']}"
+                    f"🎉 Yangi do‘st kirdi!\nReferral soni: {users[ref_id]['referrals']}"
                 )
             except:
                 pass
-            save_json(USERS_FILE, users)
+            save_users(users)
 
     text = (
         f"<b>Assalomu alaykum, {user.first_name}!</b> 👋\n\n"
         f"🎬 <b>UzbekFilmTV</b> — eng sara o‘zbek filmlari shu yerdagi bot!\n\n"
         f"🔥 <b>Qanday ishlaydi?</b>\n"
         f"• Kod yuboring (masalan: 12, 45, 107) → kino darhol keladi\n"
-        f"• Bepul limit: <b>5 ta kino</b>\n"
-        f"• Har bir do‘st taklif qilsangiz → +5 ta limit qo‘shiladi\n\n"
-        f"🚀 <b>Tayyormisiz?</b> Kodni yuboring yoki do‘stlaringizni taklif qiling!"
+        f"• Bepul limit: <b>{FREE_LIMIT} ta kino</b>\n"
+        f"• Har bir do‘st taklif qilsangiz → +{REF_LIMIT} ta limit\n\n"
+        f"🚀 Kodni yuboring yoki do‘stlaringizni taklif qiling!"
     )
 
     kb = []
-    if is_admin(user.id):
-        kb.append([InlineKeyboardButton("🛠 Admin panel", callback_data="admin")])
+    if user.id == ADMIN_ID:
+        kb.append([InlineKeyboardButton("🛠 Admin panel", callback_data="admin_panel")])
 
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb) if kb else None, parse_mode="HTML")
+    await update.message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(kb) if kb else None,
+        parse_mode="HTML"
+    )
 
-# ================= ADMIN PANEL =================
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
 
-    if not is_admin(q.from_user.id):
+# ================= ADMIN PANEL & CALLBACKS =================
+async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    await query.answer()
+
+    if user_id != ADMIN_ID:
+        await query.message.reply_text("Siz admin emassiz.")
         return
 
-    if q.data == "admin":
-        kb = [
-            [InlineKeyboardButton("➕ Kino qo‘shish", callback_data="add"),
-             InlineKeyboardButton("➖ Kino o‘chirish", callback_data="delete")],
-            [InlineKeyboardButton("📊 Statistika", callback_data="stats"),
-             InlineKeyboardButton("📢 Omaviy xabar", callback_data="broadcast")],
-        ]
-        await q.edit_message_text("🛠 Admin panel", reply_markup=InlineKeyboardMarkup(kb))
+    data = query.data
+
+    if data == "admin_panel":
+        await query.edit_message_text("🛠 Admin panel", reply_markup=get_admin_keyboard())
         return
 
-    if q.data == "broadcast":
-        context.user_data["mode"] = "broadcast"
-        await q.message.reply_text(
-            "📢 Endi yuborgan xabaringiz (matn, rasm, video, audio, hujjat...) hammaga jo'natiladi.\n"
-            "Bekor qilish uchun /cancel yozing."
+    users = load_users()
+    movies = load_json(MOVIES_FILE, {})
+
+    if data == "admin_stats":
+        text = (
+            f"📊 <b>Statistika</b>\n\n"
+            f"👥 Foydalanuvchilar: <b>{len(users)}</b>\n"
+            f"🎥 Kinolar soni:    <b>{len(movies)}</b>"
         )
+        await query.message.reply_text(text, parse_mode="HTML")
         return
 
-    if q.data in ["add", "delete"]:
-        context.user_data["mode"] = q.data
-        if q.data == "add":
-            await q.message.reply_text("Format:\n`kod|file_id yoki kanal link`")
-        elif q.data == "delete":
-            await q.message.reply_text("O‘chirish uchun kodni yuboring")
+    if data == "admin_list_movies":
+        if not movies:
+            text = "Hozircha hech qanday kino qo‘shilmagan."
+        else:
+            lines = ["🎬 <b>Kinolar ro‘yxati</b>\n"]
+            for i, code in enumerate(sorted(movies.keys()), 1):
+                lines.append(f"{i}. <code>{code}</code>")
+            text = "\n".join(lines)
+        await query.message.reply_text(text, parse_mode="HTML")
         return
 
-    if q.data == "stats":
-        users = load_json(USERS_FILE, {})
-        movies = load_json(MOVIES_FILE, {})
-        await q.message.reply_text(f"👥 Userlar: {len(users)}\n🎬 Kinolar: {len(movies)}")
+    if data in ("admin_add_movie", "admin_delete_movie"):
+        mode = "add" if data == "admin_add_movie" else "delete"
+        context.user_data["admin_mode"] = mode
+        if mode == "add":
+            await query.message.reply_text("Format:\n<code>kod|file_id yoki kanal link</code>")
+        else:
+            await query.message.reply_text("O‘chirish uchun kodni yuboring")
+        return
 
-# ================= TEXT HANDLER =================
+
+# ================= TEXT / MOVIE HANDLER =================
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     text = msg.text.strip()
     user_id = msg.from_user.id
 
-    users = load_json(USERS_FILE, {})
-    movies = load_json(MOVIES_FILE, {})
-    user = get_user(users, user_id)
-    mode = context.user_data.get("mode")
-
-    # Cancel
+    # /cancel
     if text == "/cancel":
         context.user_data.clear()
         await msg.reply_text("❌ Bekor qilindi")
         return
 
-    # Admin userga limit qo‘shish
-    if is_admin(user_id) and text.startswith("limit "):
-        try:
-            _, target_uid, extra = text.split()
-            target_uid = str(target_uid)
-            extra = int(extra)
+    users  = load_users()
+    movies = load_json(MOVIES_FILE, {})
 
-            if target_uid in users:
-                users[target_uid]["referrals"] += extra // REF_LIMIT
-                save_json(USERS_FILE, users)
-                new_max = max_limit(users[target_uid])
-                await msg.reply_text(
-                    f"User {target_uid} ga qo‘shimcha limit berildi!\n"
-                    f"Yangi referrals: {users[target_uid]['referrals']}\n"
-                    f"Jami limit: {new_max}"
-                )
-            else:
-                await msg.reply_text("Bunday user topilmadi")
-        except:
-            await msg.reply_text("Format noto‘g‘ri!\nMisol: limit 123456789 15")
-        return
+    user = get_user(users, user_id)
+    mode = context.user_data.get("admin_mode")
 
-    # Broadcast
-    if is_admin(user_id) and mode == "broadcast":
-        success = 0
-        total = len(users)
-
-        for uid_str in users:
-            try:
-                uid = int(uid_str)
-
-                if msg.text:
-                    await context.bot.send_message(uid, msg.text)
-                elif msg.photo:
-                    await context.bot.send_photo(uid, photo=msg.photo[-1].file_id, caption=msg.caption)
-                elif msg.video:
-                    await context.bot.send_video(uid, video=msg.video.file_id, caption=msg.caption)
-                elif msg.audio:
-                    await context.bot.send_audio(uid, audio=msg.audio.file_id, caption=msg.caption)
-                elif msg.document:
-                    await context.bot.send_document(uid, document=msg.document.file_id, caption=msg.caption)
-                else:
-                    await context.bot.copy_message(uid, msg.chat_id, msg.message_id)
-                success += 1
-            except:
-                pass
-
-        await msg.reply_text(f"✅ Yuborildi: {success}/{total} userga")
-        context.user_data.clear()
-        return
-
-    # Admin add/delete
-    if is_admin(user_id):
+    # Admin kino qo‘shish / o‘chirish
+    if user_id == ADMIN_ID and mode in ("add", "delete"):
         if mode == "add":
             if "|" not in text:
                 await msg.reply_text("Format: kod|value")
                 return
-            code, val = [x.strip() for x in text.split("|", 1)]
-            movies[code] = val
+            code, value = [x.strip() for x in text.split("|", 1)]
+            movies[code] = value
             save_json(MOVIES_FILE, movies)
-            context.user_data.clear()
-            await msg.reply_text("✅ Kino qo‘shildi")
-            return
-
-        if mode == "delete":
+            await msg.reply_text(f"✅ Kod <code>{code}</code> qo‘shildi")
+        else:  # delete
             if text in movies:
                 del movies[text]
                 save_json(MOVIES_FILE, movies)
-                await msg.reply_text("🗑 O‘chirildi")
+                await msg.reply_text(f"🗑 Kod <code>{text}</code> o‘chirildi")
             else:
-                await msg.reply_text("❌ Topilmadi")
-            context.user_data.clear()
-            return
+                await msg.reply_text("❌ Bunday kod topilmadi")
+        context.user_data.pop("admin_mode", None)
+        return
 
-    # User movie request
-    if text in movies:
-        if user["used"] >= max_limit(user):
-            ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-            share_text = (
-                f"Eng zo‘r o‘zbek filmlari shu botda! 🔥\n"
-                f"Bepul 5 ta kino + har bir do‘st uchun +5 ta limit!\n\n"
-                f"{ref_link}"
-            )
-            share_url = f"https://t.me/share/url?url={quote(ref_link)}&text={quote(share_text)}"
+    # Oddiy user → kino so‘rayapti
+    if text not in movies:
+        await msg.reply_text("❌ Bunday kod topilmadi")
+        return
 
-            kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("👥 Do‘stlarga ulashish", url=share_url)
-            ]])
+    current_limit = max_limit(user)
+    if user["used"] >= current_limit:
+        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+        share_text = quote(
+            f"Eng zo‘r o‘zbek filmlari shu botda! 🔥\n"
+            f"Bepul {FREE_LIMIT} ta + har bir do‘st uchun +{REF_LIMIT} ta!\n\n{ref_link}"
+        )
+        share_url = f"https://t.me/share/url?url={quote(ref_link)}&text={share_text}"
 
-            await msg.reply_text(
-                f"🔒 Limit tugadi!\n\n"
-                f"Qolgan: 0/{max_limit(user)}\n"
-                f"Do‘stlar soni: {user['referrals']}\n\n"
-                f"Yana ko‘proq kino uchun do‘stlaringizni taklif qiling!",
-                reply_markup=kb,
-                disable_web_page_preview=True
-            )
-            return
-
-        user["used"] += 1
-        save_json(USERS_FILE, users)
-
-        btn = InlineKeyboardMarkup([[
-            InlineKeyboardButton(
-                "🔍 Botda qidirish / Yangi filmlar",
-                url=f"https://t.me/{BOT_USERNAME}?start=qidiruv"
-            )
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("👥 Do‘stlarga ulashish", url=share_url)
         ]])
 
-        extra_text = (
-            f"🎬 Kino tayyor 🍿\n"
-            f"Qolgan: {user['used']}/{max_limit(user)}\n"
-            f"Bu bot orqali yuklandi"
+        await msg.reply_text(
+            f"🔒 Limit tugadi!\n\n"
+            f"Qolgan: 0/{current_limit}\n"
+            f"Do‘stlar: {user['referrals']}",
+            reply_markup=kb,
+            disable_web_page_preview=True
         )
+        return
 
-        val = movies[text]
-        if val.startswith("https://t.me/c/"):
-            p = val.replace("https://t.me/c/", "").split("/")
-            channel_id = int("-100" + p[0])
-            msg_id = int(p[1])
+    # Limit bor → kino beramiz
+    user["used"] += 1
+    save_users(users)
 
-            # 1. Kanal xabarini asl holatida ko‘chirish (caption saqlanadi)
+    remaining = f"{user['used']}/{current_limit}"
+
+    caption = (
+        "🎬 Kino tayyor 🍿\n"
+        f"Qolgan: {remaining}\n\n"
+        f"🤖 @{BOT_USERNAME}\n"
+        f"📢 @UzbekFilmTv_Kanal"
+    )
+
+    val = movies[text]
+
+    if val.startswith("https://t.me/c/"):
+        try:
+            parts = val.replace("https://t.me/c/", "").split("/")
+            channel_id = int("-100" + parts[0])
+            msg_id = int(parts[1])
+
             await context.bot.copy_message(
                 chat_id=msg.chat_id,
                 from_chat_id=channel_id,
                 message_id=msg_id,
-                reply_markup=btn,
-                # caption bermaymiz → asl caption saqlanib qoladi
+                caption=caption,           # yangi caption
+                parse_mode="HTML"
             )
+        except Exception as e:
+            await msg.reply_text(f"Xato: kanal xabari ko‘chirib bo‘lmadi\n({str(e)})")
+    else:
+        # file_id deb faraz qilamiz (video)
+        await msg.reply_video(
+            video=val,
+            caption=caption,
+            parse_mode="HTML"
+        )
 
-            # 2. Qo‘shimcha ma'lumot alohida matn sifatida
-            await msg.reply_text(extra_text, reply_markup=btn)
 
-        else:
-            # To‘g‘ridan-to‘g‘ri file_id (video) bo‘lsa
-            await msg.reply_video(
-                video=val,
-                caption=extra_text,
-                reply_markup=btn
-            )
-        return
-
-    await msg.reply_text("❌ Bunday kod topilmadi")
-
-# ================= MAIN =================
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("cancel", lambda u,c: cancel_broadcast(u,c)))  # /cancel qo‘shildi
-    app.add_handler(CallbackQueryHandler(admin_panel))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-
-    print("Bot ishga tushdi...")
-    app.run_polling(drop_pending_updates=True)
-
-async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    await update.message.reply_text("❌ Bekor qilindi")
-
-if __name__ == "__main__":
-    main()
+def load_json(path, default=None
