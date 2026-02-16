@@ -203,21 +203,50 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = msg.text.strip()
     user_id = msg.from_user.id
 
+    users = load_users()
+    # movies yuklash kodi...
+
     if text == "/cancel":
         context.user_data.clear()
         await msg.reply_text("❌ Bekor qilindi")
         return
 
-    users = load_users()
-    try:
-        with open(MOVIES_FILE, 'r', encoding='utf-8') as f:
-            movies = json.load(f)
-    except:
-        movies = {}
+    # <--- BU YERDA qo'shish kerak (taxminan 10-15-qator atrofida)
+    if user_id == ADMIN_ID and text.lower().startswith("limit "):
+        parts = text.split()
+        if len(parts) != 3:
+            await msg.reply_text("Format: limit <user_id> <qancha_limit>\nMisol: limit 123456789 15")
+            return
+        
+        try:
+            target_uid = str(parts[1])
+            extra_kino = int(parts[2])
+            
+            if target_uid not in users:
+                await msg.reply_text("Bunday user topilmadi")
+                return
+                
+            extra_referrals = extra_kino // REF_LIMIT
+            users[target_uid]["referrals"] += extra_referrals
+            save_users(users)
+            
+            new_max = max_limit(users[target_uid])
+            await msg.reply_text(
+                f"User {target_uid} ga qo‘shimcha limit berildi!\n"
+                f"Qo‘shilgan referrals: +{extra_referrals}\n"
+                f"Yangi jami limit: {new_max}"
+            )
+        except ValueError:
+            await msg.reply_text("Limit soni butun son bo‘lishi kerak")
+        except Exception as e:
+            await msg.reply_text(f"Xato: {str(e)}")
+        return
 
-    user = get_user(users, user_id)
+    # keyingi kodlar (mode tekshiruvi, kino berish va h.k.)
     mode = context.user_data.get("mode")
-
+    if user_id == ADMIN_ID and mode:
+        # kino qo'shish/o'chirish logikasi
+        ...
     # Admin kino qo'shish / o'chirish
     if user_id == ADMIN_ID and mode:
         if mode == "add":
