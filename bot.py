@@ -310,4 +310,4 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-def load_json(path, default=None
+def load_json(path, default=None)
