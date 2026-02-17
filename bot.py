@@ -1,6 +1,6 @@
 import os
 import json
-import asyncio    # ← BU QATORNI ALBATTA QO'SHING !!!
+import asyncio
 from datetime import datetime
 from urllib.parse import quote
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -26,7 +26,6 @@ FREE_LIMIT = 5
 REF_LIMIT = 5
 
 # ================= Fayl bilan ishlash =================
-# (sizning asl funksiyalaringiz – o'zgarmadi)
 
 def load_users() -> dict:
     if not os.path.exists(USERS_FILE):
@@ -105,7 +104,7 @@ def max_limit(user: dict) -> int:
     return FREE_LIMIT + user["referrals"] * REF_LIMIT
 
 
-# ================= ADMIN KEYBOARD (broadcast qo'shildi) =================
+# ================= ADMIN KEYBOARD =================
 def admin_keyboard():
     return InlineKeyboardMarkup([
         [
@@ -122,9 +121,8 @@ def admin_keyboard():
     ])
 
 
-# ================= START (o'zgarmadi) =================
+# ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # sizning asl kodingiz – hech narsa o'zgarmagan
     user = update.effective_user
     args = context.args
 
@@ -159,7 +157,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb) if kb else None, parse_mode="HTML")
 
 
-# ================= ADMIN PANEL (broadcast qo'shildi) =================
+# ================= ADMIN PANEL =================
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -192,8 +190,9 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["mode"] = "wait_broadcast"
         await q.message.reply_text(
             "📢 Omaviy xabar yuborish\n\n"
-            "Bot nomidan yubormoqchi bo‘lgan xabarni (matn, rasm, video, hujjat) yuboring yoki forward qiling.\n"
-            "Bekor qilish uchun /cancel"
+            "Bot nomidan yubormoqchi bo‘lgan xabarni yuboring (yoki forward qiling).\n"
+            "Matn, rasm, video, hujjat — hammasi qo‘llab-quvvatlanadi.\n\n"
+            "Bekor qilish uchun: /cancel"
         )
         return
 
@@ -204,7 +203,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-# ================= UMUMIY HANDLER (text + media) =================
+# ================= UMUMIY MESSAGE HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     user_id = msg.from_user.id
@@ -220,10 +219,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(users, user_id)
     mode = context.user_data.get("mode")
 
-    # Broadcast rejimi
+    # Broadcast
     if mode == "wait_broadcast" and user_id == ADMIN_ID:
         context.user_data["mode"] = "sending_broadcast"
-        await msg.reply_text("Yuborilmoqda... (biroz vaqt ketishi mumkin)")
+        await msg.reply_text("Yuborilmoqda... (katta bazada biroz vaqt ketishi mumkin)")
 
         success = 0
         failed = 0
@@ -232,9 +231,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for uid_str in list(users.keys()):
             try:
                 uid = int(uid_str)
-                await msg.copy(chat_id=uid)
+                if msg.text or msg.caption:
+                    await msg.copy(chat_id=uid)
+                else:
+                    await context.bot.send_message(uid, "Xabar turi qo‘llab-quvvatlanmaydi")
                 success += 1
-                await asyncio.sleep(0.4)  # Telegram limitini buzmaslik uchun
+                await asyncio.sleep(0.4)
             except Exception:
                 failed += 1
 
@@ -246,9 +248,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Jami userlar: {total}"
         )
         return
-
-    # Qolgan butun logika – sizning asl kodingiz (kino kodlari, limit qo'shish, add/delete)
-    # Bu yerda hech narsa o'zgarmagan – faqat yuqoridagi broadcast qo'shildi
 
     # Admin limit qo‘shish
     if user_id == ADMIN_ID and text.lower().startswith("limit "):
@@ -292,7 +291,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("mode", None)
         return
 
-    # User kino kodi yubordi
+    # User kino so‘radi
     if text in movies:
         if user["used"] >= max_limit(user):
             ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
@@ -386,12 +385,14 @@ def main():
     app.add_handler(CommandHandler("cancel", lambda u, c: cancel_broadcast(u, c)))
     app.add_handler(CallbackQueryHandler(admin_panel))
 
-    # Bitta handler – text + media uchun
-    app.add_handler(MessageHandler(
-        filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document |
-        filters.AUDIO | filters.VOICE | filters.VIDEO_NOTE,
-        message_handler
-    ))
+    # Alohida handlerlar – eski versiyalarda xavfsizroq
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    app.add_handler(MessageHandler(filters.PHOTO, message_handler))
+    app.add_handler(MessageHandler(filters.VIDEO, message_handler))
+    app.add_handler(MessageHandler(filters.Document.ALL, message_handler))  # hujjatlar
+    app.add_handler(MessageHandler(filters.AUDIO, message_handler))
+    app.add_handler(MessageHandler(filters.VOICE, message_handler))
+    app.add_handler(MessageHandler(filters.VIDEO_NOTE, message_handler))
 
     print("Bot ishga tushdi...")
     app.run_polling(drop_pending_updates=True)
