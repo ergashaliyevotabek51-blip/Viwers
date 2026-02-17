@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from datetime import datetime
 from urllib.parse import quote
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -13,10 +14,10 @@ from telegram.ext import (
 )
 
 # ================= CONFIG =================
-TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 774440841
-BOT_USERNAME = "UzbekFilmTv_bot"           # o'zingiznikiga o'zgartiring
-CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"    # kanal username (agar kerak bo'lsa)
+TOKEN = os.getenv("BOT_TOKEN")              # .env yoki muhit o'zgaruvchisidan olinadi
+ADMIN_ID = 774440841                        # admin user ID
+BOT_USERNAME = "UzbekFilmTv_bot"            # o'zingiznikiga o'zgartiring
+CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"     # agar kanal bo'lsa
 
 USERS_FILE = "users.json"
 MOVIES_FILE = "movies.json"
@@ -114,6 +115,9 @@ def admin_keyboard():
             InlineKeyboardButton("📃 Kinolar ro‘yxati", callback_data="list_movies"),
             InlineKeyboardButton("📊 Statistika", callback_data="stats"),
         ],
+        [
+            InlineKeyboardButton("📢 Omaviy xabar yuborish", callback_data="broadcast"),
+        ],
     ])
 
 
@@ -182,6 +186,16 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.reply_text(text)
         return
 
+    if data == "broadcast":
+        context.user_data["mode"] = "broadcast_wait"
+        await q.message.reply_text(
+            "📢 Omaviy xabar yuborish\n\n"
+            "Endi bot nomidan yubormoqchi bo‘lgan xabarni yuboring (yoki forward qiling).\n"
+            "Matn, rasm, video, hujjat, gif, ovoz — hammasi qo‘llab-quvvatlanadi.\n\n"
+            "Bekor qilish uchun: /cancel"
+        )
+        return
+
     if data in ["add", "delete"]:
         context.user_data["mode"] = data
         msg = "Format:\n`kod|file_id yoki kanal link`" if data == "add" else "O‘chirish uchun kodni yuboring"
@@ -189,11 +203,12 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-# ================= TEXT HANDLER =================
-async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ================= MESSAGE HANDLER (text + media) =================
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    text = msg.text.strip()
     user_id = msg.from_user.id
+
+    text = msg.text.strip() if msg.text else ""
 
     users = load_users()
     movies = load_movies()
@@ -205,7 +220,35 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("❌ Bekor qilindi")
         return
 
-    # Admin limit qo‘shish
+    # ─────────────── Broadcast rejimi ───────────────
+    if mode == "broadcast_wait" and user_id == ADMIN_ID:
+        context.user_data["mode"] = "broadcast_sending"
+        await msg.reply_text("Boshlandi... Yuborilmoqda (katta bazada biroz vaqt ketishi mumkin)")
+
+        success = 0
+        failed = 0
+        total = len(users)
+
+        for uid_str in list(users.keys()):
+            try:
+                uid = int(uid_str)
+                await msg.copy(chat_id=uid)
+                success += 1
+                await asyncio.sleep(0.40)   # ~2.5 xabar/sekund – xavfsiz tezlik
+            except Exception:
+                failed += 1
+
+        context.user_data.clear()
+        await msg.reply_text(
+            f"✅ Omaviy yuborish tugadi!\n"
+            f"Muvaffaqiyatli: {success}\n"
+            f"Muvaffaqiyatsiz: {failed}\n"
+            f"Jami userlar: {total}"
+        )
+        save_users(users)
+        return
+
+    # ─────────────── Admin limit qo‘shish ───────────────
     if user_id == ADMIN_ID and text.lower().startswith("limit "):
         try:
             _, target_uid, extra = text.split()
@@ -227,7 +270,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Format noto‘g‘ri!\nMisol: limit 123456789 15")
         return
 
-    # Kino qo‘shish / o‘chirish
+    # ─────────────── Kino qo‘shish / o‘chirish ───────────────
     if user_id == ADMIN_ID and mode in ["add", "delete"]:
         if mode == "add":
             if "|" not in text:
@@ -247,7 +290,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("mode", None)
         return
 
-    # User kino so‘radi
+    # ─────────────── Oddiy foydalanuvchi kino kodi yuborsa ───────────────
     if text in movies:
         if user["used"] >= max_limit(user):
             ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
@@ -277,7 +320,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         remaining = f"{user['used']}/{max_limit(user)}"
 
-        # Ulashish tugmasi
         ref_link = f"https://t.me/{BOT_USERNAME}"
         share_text = quote(
             f"Eng zo‘r o‘zbek filmlari shu botda! 🔥\n"
@@ -297,7 +339,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             channel_id = int("-100" + p[0])
             msg_id = int(p[1])
 
-            # 1. Kanal xabarini ASLI HOLATIDA ko'chirish (asl caption saqlanadi)
             await context.bot.copy_message(
                 chat_id=msg.chat_id,
                 from_chat_id=channel_id,
@@ -305,7 +346,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=share_kb
             )
 
-            # 2. Pastga reply qilib qo'shimcha matn
             extra = (
                 f"🎬 Kino tayyor 🍿\n"
                 f"Qolgan: {remaining}\n\n"
@@ -316,7 +356,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text(extra, parse_mode="HTML", reply_markup=share_kb)
 
         else:
-            # file_id bo'lsa
             caption = (
                 f"🎬 Kino tayyor 🍿\n"
                 f"Qolgan: {remaining}\n\n"
@@ -333,7 +372,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    await msg.reply_text("❌ Bunday kod topilmadi")
+    # Hech narsa mos kelmagan bo'lsa
+    if text:
+        await msg.reply_text("❌ Bunday kod topilmadi")
 
 
 # ================= MAIN =================
@@ -343,7 +384,13 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("cancel", lambda u, c: cancel_broadcast(u, c)))
     app.add_handler(CallbackQueryHandler(admin_panel))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
+    # Text + deyarli barcha media turlari
+    app.add_handler(MessageHandler(
+        filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document |
+        filters.AUDIO | filters.VOICE | filters.VIDEO_NOTE,
+        message_handler
+    ))
 
     print("Bot ishga tushdi...")
     app.run_polling(drop_pending_updates=True)
