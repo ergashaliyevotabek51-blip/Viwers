@@ -269,44 +269,94 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ================= Obuna funksiyalari =================
+# ================= Obuna funksiyalari =================
 async def is_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
     if not MANDATORY_CHANNELS:
         return True
-
     for channel in MANDATORY_CHANNELS:
         try:
             member = await context.bot.get_chat_member(channel, user_id)
             if member.status not in ["member", "administrator", "creator"]:
                 return False
-        except TelegramError as e:
+        except Exception as e:
             print(f"Obuna tekshirish xatosi {channel}: {e}")
-            return False
+            # Xato chiqsa ham bloklamaymiz (hosting xatolari uchun yumshoqroq)
     return True
 
 
 async def send_subscription_message(message):
     if not MANDATORY_CHANNELS:
-        await message.reply_text("Majburiy obuna sozlanmagan.")
+        await message.reply_text("Majburiy kanallar hali sozlanmagan.")
         return
 
     kb = []
+    all_subscribed = True
+
     for channel in MANDATORY_CHANNELS:
         clean = channel.lstrip('@')
+        try:
+            member = await message.bot.get_chat_member(channel, message.from_user.id)
+            subscribed = member.status in ["member", "administrator", "creator"]
+        except:
+            subscribed = False
+
+        emoji = "✅" if subscribed else "📣"
         kb.append([InlineKeyboardButton(
-            f"📣 {clean} ga obuna bo‘lish",
+            f"{emoji} {clean} ga obuna bo‘lish",
             url=f"https://t.me/{clean}"
         )])
 
-    kb.append([InlineKeyboardButton("✅ Obuna bo‘ldim, tekshirish", callback_data="check_sub")])
+        if not subscribed:
+            all_subscribed = False
 
-    channels_text = "\n".join(MANDATORY_CHANNELS)
+    if all_subscribed:
+        kb.append([InlineKeyboardButton("Botdan foydalanish →", callback_data="check_sub")])
+    else:
+        kb.append([InlineKeyboardButton("Obuna bo‘ldim, tekshirish", callback_data="check_sub")])
 
-    await message.reply_text(
+    channels_text = "\n".join(f"• {ch}" for ch in MANDATORY_CHANNELS)
+
+    text = (
         f"Botdan foydalanish uchun quyidagi kanallarga obuna bo‘ling:\n\n"
         f"{channels_text}\n\n"
-        "Obuna bo‘lgandan keyin tugmani bosing!",
-        reply_markup=InlineKeyboardMarkup(kb)
+        "Obuna bo‘lgach «Tekshirish» tugmasini bosing! 🚀"
     )
+
+    if all_subscribed:
+        text += "\n\n🎉 Hammasiga obuna bo‘lgansiz! Botdan foydalanishingiz mumkin!"
+
+    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
+
+
+# ================= CALLBACK QUERY HANDLER (admin_panel ichida allaqachon bor) =================
+# check_sub holatini yangilash uchun quyidagi qismni admin_panel funksiyasiga qo‘shing yoki alohida handler qiling
+
+# Agar alohida handler qilmoqchi bo‘lsangiz, main() ga qo‘shing:
+# app.add_handler(CallbackQueryHandler(subscription_check, pattern="^check_sub$"))
+
+async def subscription_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+
+    if await is_subscribed(context, user_id):
+        await query.edit_message_text(
+            "🎉 Hammasiga obuna bo‘lgansiz!\n\n"
+            "Endi botdan bemalol foydalaning! 🍿✨",
+            reply_markup=None
+        )
+        # stiker yuborish (ixtiyoriy, stiker ID ni o‘zingizniki bilan almashtiring)
+        try:
+            await query.message.reply_sticker("CAACAgIAAxkBAAEK...")  # shu yerga stiker file_id qo‘ying
+        except:
+            pass
+    else:
+        await query.edit_message_text(
+            "❌ Hali hammaga obuna bo‘lmagansiz.\n"
+            "Iltimos, kanallarga azo bo‘ling va yana tekshirib ko‘ring!",
+            reply_markup=query.message.reply_markup  # tugmalar saqlanib qoladi
+        )
 
 
 # ================= MESSAGE HANDLER =================
