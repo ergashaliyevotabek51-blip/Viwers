@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import json
 import asyncio
@@ -16,35 +17,38 @@ from telegram.error import TelegramError
 
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_IDS = [774440841, 123456789]          # ← Bu yerga ikkinchi (va uchinchi, to'rtinchi...) admin ID larini qo'shing
+ADMIN_IDS = [774440841, 7818576058]                     # ← bu yerga qo‘shimcha admin ID larni qo‘shing
+
 BOT_USERNAME = "UzbekFilmTv_bot"
 CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"
 
-MANDATORY_CHANNEL = None
-USERS_FILE = "users.json"
-MOVIES_FILE = "movies.json"
-SETTINGS_FILE = "settings.json"
+MANDATORY_CHANNELS = []                     # ["@kanal1", "@kanal2", ...] — hozircha bo‘sh
+
+USERS_FILE     = "users.json"
+MOVIES_FILE    = "movies.json"
+SETTINGS_FILE  = "settings.json"
 
 FREE_LIMIT = 5
-REF_LIMIT = 5
+REF_LIMIT  = 5
 
 # ================= SETTINGS =================
 def load_settings():
-    global MANDATORY_CHANNEL
+    global MANDATORY_CHANNELS
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                MANDATORY_CHANNEL = data.get("mandatory_channel")
+                MANDATORY_CHANNELS = data.get("mandatory_channels", [])
         except Exception as e:
             print(f"settings yuklash xatosi: {e}")
+            MANDATORY_CHANNELS = []
 
 
 def save_settings():
-    global MANDATORY_CHANNEL
+    global MANDATORY_CHANNELS
     try:
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump({"mandatory_channel": MANDATORY_CHANNEL}, f, ensure_ascii=False, indent=2)
+            json.dump({"mandatory_channels": MANDATORY_CHANNELS}, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"settings saqlash xatosi: {e}")
 
@@ -156,7 +160,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
 
     # Majburiy obuna tekshiruvi
-    if MANDATORY_CHANNEL and not await is_subscribed(context, user.id):
+    if MANDATORY_CHANNELS and not await is_subscribed(context, user.id):
         await send_subscription_message(update.message)
         return
 
@@ -212,7 +216,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if await is_subscribed(context, user_id):
             await q.edit_message_text("✅ Obuna tasdiqlandi! Endi botdan foydalanishingiz mumkin.")
         else:
-            await q.edit_message_text("❌ Hali obuna bo‘lmagansiz. Iltimos kanalga qo‘shiling.")
+            await q.edit_message_text("❌ Hali obuna bo‘lmagansiz. Iltimos kanallarga qo‘shiling.")
         return
 
     if user_id not in ADMIN_IDS:
@@ -249,10 +253,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "subscription":
-        current = MANDATORY_CHANNEL or "Majburiy obuna yo‘q"
-        text = f"Hozirgi majburiy kanal: {current}\n\n"
-        text += "Yangi kanal username ni yuboring (masalan: @MyChannel)\n"
-        text += "Yo‘q qilish uchun: off yoki yo‘q deb yozing"
+        current = "\n".join(MANDATORY_CHANNELS) if MANDATORY_CHANNELS else "Majburiy obuna yo‘q"
+        text = f"Hozirgi majburiy kanallar:\n{current}\n\n"
+        text += "Yangi kanallarni qo‘shish uchun @kanal1 @kanal2 formatida yuboring\n"
+        text += "Tozalash uchun: clear yoki off deb yozing"
         context.user_data["mode"] = "set_subscription"
         await q.message.reply_text(text)
         return
@@ -266,25 +270,42 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= Obuna funksiyalari =================
 async def is_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
-    if not MANDATORY_CHANNEL:
+    if not MANDATORY_CHANNELS:
         return True
-    try:
-        member = await context.bot.get_chat_member(MANDATORY_CHANNEL, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except TelegramError as e:
-        print(f"Obuna tekshirish xatosi: {e}")
-        return False
+
+    for channel in MANDATORY_CHANNELS:
+        try:
+            member = await context.bot.get_chat_member(channel, user_id)
+            if member.status not in ["member", "administrator", "creator"]:
+                return False
+        except TelegramError as e:
+            print(f"Obuna tekshirish xatosi {channel}: {e}")
+            return False
+    return True
 
 
 async def send_subscription_message(message):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📣 Kanalga obuna bo‘lish", url=f"https://t.me/{MANDATORY_CHANNEL.lstrip('@')}")],
-        [InlineKeyboardButton("✅ Obuna bo‘ldim, tekshirish", callback_data="check_sub")]
-    ])
+    if not MANDATORY_CHANNELS:
+        await message.reply_text("Majburiy obuna sozlanmagan.")
+        return
+
+    kb = []
+    for channel in MANDATORY_CHANNELS:
+        clean = channel.lstrip('@')
+        kb.append([InlineKeyboardButton(
+            f"📣 {clean} ga obuna bo‘lish",
+            url=f"https://t.me/{clean}"
+        )])
+
+    kb.append([InlineKeyboardButton("✅ Obuna bo‘ldim, tekshirish", callback_data="check_sub")])
+
+    channels_text = "\n".join(MANDATORY_CHANNELS)
+
     await message.reply_text(
-        f"Botdan foydalanish uchun quyidagi kanalga obuna bo‘ling:\n\n{MANDATORY_CHANNEL}\n\n"
+        f"Botdan foydalanish uchun quyidagi kanallarga obuna bo‘ling:\n\n"
+        f"{channels_text}\n\n"
         "Obuna bo‘lgandan keyin tugmani bosing!",
-        reply_markup=kb
+        reply_markup=InlineKeyboardMarkup(kb)
     )
 
 
@@ -301,27 +322,36 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     mode = context.user_data.get("mode")
 
-    # Majburiy obuna sozlash — faqat adminlar
-    if mode == "set_subscription" and user_id not in ADMIN_IDS:
-        return
-
+    # Majburiy obuna sozlash
     if mode == "set_subscription" and user_id in ADMIN_IDS:
-        global MANDATORY_CHANNEL
-        if text.lower() in ["off", "yo‘q", "o'chir", "delete"]:
-            MANDATORY_CHANNEL = None
+        global MANDATORY_CHANNELS
+        t = text.lower().strip()
+
+        if t in ["clear", "off", "yo‘q", "o'chir", "delete"]:
+            MANDATORY_CHANNELS = []
             save_settings()
-            await msg.reply_text("✅ Majburiy obuna o‘chirildi")
-        else:
-            channel = text.strip()
-            if not channel.startswith("@"):
-                channel = "@" + channel
-            try:
-                await context.bot.get_chat(channel)
-                MANDATORY_CHANNEL = channel
+            await msg.reply_text("✅ Majburiy kanallar tozalandi / o‘chirildi")
+            context.user_data.pop("mode", None)
+            return
+
+        words = text.split()
+        if words and words[0].startswith("@"):
+            added = []
+            for ch in words:
+                ch = ch.strip()
+                if ch.startswith("@") and ch not in MANDATORY_CHANNELS:
+                    try:
+                        await context.bot.get_chat(ch)
+                        MANDATORY_CHANNELS.append(ch)
+                        added.append(ch)
+                    except Exception as e:
+                        await msg.reply_text(f"Xato: {ch} — bot admin emas yoki topilmadi")
+            if added:
                 save_settings()
-                await msg.reply_text(f"✅ Majburiy kanal o‘rnatildi: {channel}")
-            except Exception as e:
-                await msg.reply_text(f"❌ Xato: kanal topilmadi yoki bot admin emas\n{str(e)[:150]}")
+                await msg.reply_text(f"Qo‘shildi: {', '.join(added)}\n\nYangi ro‘yxat:\n{', '.join(MANDATORY_CHANNELS) or 'bo‘sh'}")
+        else:
+            await msg.reply_text("Format: @kanal1 @kanal2 @kanal3\nyoki clear/off")
+
         context.user_data.pop("mode", None)
         return
 
@@ -486,6 +516,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= MAIN =================
 def main():
+    if not TOKEN:
+        print("BOT_TOKEN topilmadi!")
+        return
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
