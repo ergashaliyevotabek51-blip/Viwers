@@ -20,7 +20,8 @@ ADMIN_ID = 774440841
 BOT_USERNAME = "UzbekFilmTv_bot"
 CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"
 
-MANDATORY_CHANNEL = None
+MANDATORY_CHANNELS = []           # ["@kanal1", "@kanal2", ...] shaklida bo'ladi
+MAX_MANDATORY_CHANNELS = 10       # maksimal ruxsat etilgan kanal soni
 USERS_FILE = "users.json"
 MOVIES_FILE = "movies.json"
 SETTINGS_FILE = "settings.json"
@@ -30,24 +31,23 @@ REF_LIMIT = 5
 
 # ================= SETTINGS =================
 def load_settings():
-    global MANDATORY_CHANNEL
+    global MANDATORY_CHANNELS
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                MANDATORY_CHANNEL = data.get("mandatory_channel")
+                MANDATORY_CHANNELS = data.get("mandatory_channels", [])
         except Exception as e:
             print(f"settings yuklash xatosi: {e}")
 
 
 def save_settings():
-    global MANDATORY_CHANNEL
+    global MANDATORY_CHANNELS
     try:
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump({"mandatory_channel": MANDATORY_CHANNEL}, f, ensure_ascii=False, indent=2)
+            json.dump({"mandatory_channels": MANDATORY_CHANNELS}, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"settings saqlash xatosi: {e}")
-
 
 load_settings()
 
@@ -248,13 +248,16 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if data == "subscription":
-        current = MANDATORY_CHANNEL or "Majburiy obuna yo‘q"
-        text = f"Hozirgi majburiy kanal: {current}\n\n"
-        text += "Yangi kanal username ni yuboring (masalan: @MyChannel)\n"
-        text += "Yo‘q qilish uchun: off yoki yo‘q deb yozing"
+        if data == "subscription":
+        current = "\n".join(f"• {ch}" for ch in MANDATORY_CHANNELS) if MANDATORY_CHANNELS else "Hozircha majburiy kanal yo‘q"
+        text = f"<b>Hozirgi majburiy kanallar ({len(MANDATORY_CHANNELS)}/{MAX_MANDATORY_CHANNELS}):</b>\n{current}\n\n"
+        text += "Qo‘shish / o‘chirish buyruqlari (bir nechta kanal yozsa ham bo‘ladi):\n"
+        text += "• <code>add @kanal1 @kanal2</code>\n"
+        text += "• <code>del @kanal1</code>\n"
+        text += "• <code>clear</code> — hammasini o‘chirish\n"
+        text += "• <code>off</code> yoki <code>yo‘q</code> — majburiy obunani butunlay o‘chirish"
         context.user_data["mode"] = "set_subscription"
-        await q.message.reply_text(text)
+        await q.message.reply_text(text, parse_mode="HTML")
         return
 
     if data in ["add", "delete"]:
@@ -266,25 +269,43 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= Obuna funksiyalari =================
 async def is_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
-    if not MANDATORY_CHANNEL:
+    if not MANDATORY_CHANNELS:
         return True
-    try:
-        member = await context.bot.get_chat_member(MANDATORY_CHANNEL, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except TelegramError as e:
-        print(f"Obuna tekshirish xatosi: {e}")
-        return False
+
+    for channel in MANDATORY_CHANNELS:
+        try:
+            member = await context.bot.get_chat_member(chat_id=channel, user_id=user_id)
+            if member.status not in ["member", "administrator", "creator", "restricted"]:
+                return False
+        except TelegramError as e:
+            print(f"Obuna tekshirish xatosi {channel}: {e}")
+            return False
+    return True
 
 
 async def send_subscription_message(message):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📣 Kanalga obuna bo‘lish", url=f"https://t.me/{MANDATORY_CHANNEL.lstrip('@')}")],
-        [InlineKeyboardButton("✅ Obuna bo‘ldim, tekshirish", callback_data="check_sub")]
-    ])
+    if not MANDATORY_CHANNELS:
+        await message.reply_text("Xatolik: majburiy kanallar hali sozlanmagan.")
+        return
+
+    kb = []
+    for channel in MANDATORY_CHANNELS:
+        clean = channel.lstrip('@')
+        kb.append([InlineKeyboardButton(
+            f"📢 {clean} ga obuna bo‘lish",
+            url=f"https://t.me/{clean}"
+        )])
+
+    kb.append([InlineKeyboardButton("✅ Obuna bo‘ldim, tekshirish", callback_data="check_sub")])
+
+    channels_text = "\n".join(f"• {ch}" for ch in MANDATORY_CHANNELS)
+
     await message.reply_text(
-        f"Botdan foydalanish uchun quyidagi kanalga obuna bo‘ling:\n\n{MANDATORY_CHANNEL}\n\n"
-        "Obuna bo‘lgandan keyin tugmani bosing!",
-        reply_markup=kb
+        f"Botdan foydalanish uchun quyidagi {len(MANDATORY_CHANNELS)} ta kanalga obuna bo‘ling:\n\n"
+        f"{channels_text}\n\n"
+        "Barchasiga obuna bo‘lgach «Tekshirish» tugmasini bosing!",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
     )
 
 
@@ -301,24 +322,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Majburiy obuna sozlash
     mode = context.user_data.get("mode")
-    if mode == "set_subscription" and user_id == ADMIN_ID:
-        global MANDATORY_CHANNEL
-        if text.lower() in ["off", "yo‘q", "o'chir", "delete"]:
-            MANDATORY_CHANNEL = None
-            save_settings()
-            await msg.reply_text("✅ Majburiy obuna o‘chirildi")
-        else:
-            channel = text.strip()
-            if not channel.startswith("@"):
-                channel = "@" + channel
-            try:
-                await context.bot.get_chat(channel)
-                MANDATORY_CHANNEL = channel
-                save_settings()
-                await msg.reply_text(f"✅ Majburiy kanal o‘rnatildi: {channel}")
-            except Exception as e:
-                await msg.reply_text(f"❌ Xato: kanal topilmadi yoki bot admin emas\n{str(e)[:150]}")
-        context.user_data.pop("mode", None)
+        if data == "subscription":
+        current = "\n".join(f"• {ch}" for ch in MANDATORY_CHANNELS) if MANDATORY_CHANNELS else "Hozircha majburiy kanal yo‘q"
+        text = f"<b>Hozirgi majburiy kanallar ({len(MANDATORY_CHANNELS)}/{MAX_MANDATORY_CHANNELS}):</b>\n{current}\n\n"
+        text += "Qo‘shish / o‘chirish buyruqlari (bir nechta kanal yozsa ham bo‘ladi):\n"
+        text += "• <code>add @kanal1 @kanal2</code>\n"
+        text += "• <code>del @kanal1</code>\n"
+        text += "• <code>clear</code> — hammasini o‘chirish\n"
+        text += "• <code>off</code> yoki <code>yo‘q</code> — majburiy obunani butunlay o‘chirish"
+        context.user_data["mode"] = "set_subscription"
+        await q.message.reply_text(text, parse_mode="HTML")
         return
 
     users = load_users()
