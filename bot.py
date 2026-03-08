@@ -1,4 +1,4 @@
-# -*- coding: utf-
+# -*- coding: utf-8 -*-
 
 import os
 import json
@@ -19,7 +19,7 @@ from telegram.error import TelegramError
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
-    print("BOT_TOKEN topilmadi!")
+    print("BOT_TOKEN topilmadi! Environment variable sozlang.")
     exit(1)
 
 ADMIN_IDS = [774440841, 7818576058]  # ← O‘ZINGIZNING HAQIQIY ID’INGIZNI SHU YERGA YOZING!
@@ -27,7 +27,7 @@ ADMIN_IDS = [774440841, 7818576058]  # ← O‘ZINGIZNING HAQIQIY ID’INGIZNI S
 BOT_USERNAME = "UzbekFilmTv_bot"
 CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"
 
-MANDATORY_CHANNELS = []  # Admin paneldan qo‘shiladi
+MANDATORY_CHANNELS = []  # ["@kanal1", "@kanal2"] — admin paneldan qo‘shiladi
 
 USERS_FILE = "users.json"
 MOVIES_FILE = "movies.json"
@@ -155,7 +155,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"<b>Assalomu alaykum, {user.first_name}!</b> 👋\n\n"
         f"🎬 <b>UzbekFilmTV</b> — eng sara o‘zbek filmlari shu yerdagi bot!\n\n"
-        f"🔥 Kod yuboring (masalan: 12, 45) → kino darhol keladi\n"
+        f"🔥 Kod yuboring (masalan: 12, 45, 107) → kino darhol keladi\n"
         f"• Bepul: <b>5 ta</b>   • Do‘st uchun: <b>+5 ta</b>\n\n"
         f"🚀 Kodni yozing yoki do‘stlarni taklif qiling!"
     )
@@ -171,10 +171,9 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("❌ Siz admin emassiz!")
         return
-    print(f"[ADMIN] {update.effective_user.id} admin panelni ochdi")
     await update.message.reply_text("🛠 Admin panel ochildi!", reply_markup=admin_keyboard())
 
-# ================= ADMIN PANEL (callback) =================
+# ================= ADMIN PANEL =================
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -186,7 +185,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     data = q.data
-    print(f"[ADMIN CLICK] {user_id} → {data}")
 
     if data == "admin_panel":
         await q.edit_message_text("🛠 Admin panel", reply_markup=admin_keyboard())
@@ -238,10 +236,7 @@ async def is_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> boo
     return True
 
 
-async def send_subscription_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    message = update.message
-
+async def get_subscription_keyboard(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     kb = []
     all_subscribed = True
 
@@ -267,6 +262,15 @@ async def send_subscription_message(update: Update, context: ContextTypes.DEFAUL
         callback_data="check_sub"
     )])
 
+    return InlineKeyboardMarkup(kb), all_subscribed
+
+
+async def send_subscription_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    message = update.message
+
+    kb, all_subscribed = await get_subscription_keyboard(context, user_id)
+
     channels_text = "\n".join(f"• {ch}" for ch in MANDATORY_CHANNELS)
 
     text = (
@@ -278,7 +282,8 @@ async def send_subscription_message(update: Update, context: ContextTypes.DEFAUL
     if all_subscribed:
         text = "🎉 Hammaga obuna bo‘lgansiz!\n\nBotdan foydalanishingiz mumkin! 🍿✨"
 
-    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
+    await message.reply_text(text, reply_markup=kb)
+
 
 # ================= MESSAGE HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -294,8 +299,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("❌ Bekor qilindi")
         return
 
-    # Admin funksiyalari
     mode = context.user_data.get("mode")
+
     if user_id in ADMIN_IDS:
         if mode == "set_subscription":
             global MANDATORY_CHANNELS
@@ -324,18 +329,18 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # qolgan admin modlari (broadcast, limit, add/delete) — oldingi kod saqlanadi
         return
 
-    # Majburiy obuna tekshiruvi — HAR QANDAY XABARDA BIRINCHI
+    # Majburiy obuna tekshiruvi — eng yuqorida!
     if MANDATORY_CHANNELS and not await is_subscribed(context, user_id):
         await send_subscription_message(update, context)
         return
 
-    # Obuna tasdiqlangan — normal ishlash
     users = load_users()
     movies = load_movies()
     user = get_user(users, user_id)
 
     if text in movies:
         # kino yuborish logikasi (oldingi kod saqlanadi)
+        # limit tekshiruvi, kino yuborish...
         return
 
     await msg.reply_text("❌ Bunday kod topilmadi")
@@ -347,10 +352,20 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     data = q.data
-    print(f"[CALLBACK] User {q.from_user.id} → {data}")
 
     if data == "check_sub":
-        await send_subscription_message(update, context)
+        kb, all_subscribed = await get_subscription_keyboard(context, q.from_user.id)
+
+        if all_subscribed:
+            await q.edit_message_text(
+                "🎉 Hammaga obuna bo‘lgansiz!\n\nBotdan foydalanishingiz mumkin! 🍿✨",
+                reply_markup=None
+            )
+        else:
+            await q.edit_message_text(
+                q.message.text,
+                reply_markup=kb
+            )
         return
 
     # Admin panel tugmalari
@@ -363,20 +378,15 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_command))
-    app.add_handler(CommandHandler("cancel", lambda u, c: cancel_broadcast(u, c)))
+    app.add_handler(CommandHandler("cancel", lambda u, c: context.user_data.clear() or u.message.reply_text("❌ Bekor qilindi")))
 
     # Callback handler — BU QATOR TUFALI TUGMALAR ISHLAYDI!
     app.add_handler(CallbackQueryHandler(callback_handler))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    print("Bot ishga tushdi... Tugmalar sinovdan o‘tkazilgan")
+    print("Bot ishga tushdi... Tugmalar va obuna tizimi sinovdan o‘tkazilgan")
     app.run_polling(drop_pending_updates=True)
-
-
-async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    await update.message.reply_text("❌ Bekor qilindi")
 
 
 if __name__ == "__main__":
