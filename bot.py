@@ -16,7 +16,11 @@ from telegram.error import TelegramError
 
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_IDS = [774440841]  # o'zingizning ID + qo'shimcha adminlar qo'shing
+if not TOKEN:
+    print("BOT_TOKEN topilmadi!")
+    exit(1)
+
+ADMIN_IDS = [774440841]  # o'zingizning ID + qo'shimcha adminlarni qo'shing
 
 BOT_USERNAME = "UzbekFilmTv_bot"
 CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"
@@ -26,6 +30,7 @@ MANDATORY_CHANNELS = []  # admin paneldan qo'shiladi
 USERS_FILE = "users.json"
 MOVIES_FILE = "movies.json"
 SETTINGS_FILE = "settings.json"
+STATS_FILE = "stats.json"
 
 FREE_LIMIT = 5
 REF_LIMIT = 5
@@ -54,8 +59,26 @@ def save_settings():
 
 load_settings()
 
+# ================= STATISTIKA =================
+def load_stats() -> dict:
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+
+def save_stats(data: dict):
+    try:
+        with open(STATS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"stats saqlash xatosi: {e}")
+
 # ================= Fayl bilan ishlash =================
-def load_users() -> dict:
+def load_users():
     if not os.path.exists(USERS_FILE):
         save_users({})
         return {}
@@ -77,7 +100,7 @@ def save_users(data: dict):
         pass
 
 
-def load_movies() -> dict:
+def load_movies():
     if not os.path.exists(MOVIES_FILE):
         return {}
     try:
@@ -181,7 +204,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.reply_text(msg)
         return
 
-    # qolgan tugmalar (stats, list_movies, broadcast, subscription) — oldingi kod saqlanadi
+    # qolgan tugmalar (stats, list_movies, broadcast, subscription)
     await q.edit_message_text("Ishlamayapti tugma: " + data)  # test uchun, keyin o'chirib tashlang
 
 # ================= OBUNA FUNKSİYALARI =================
@@ -343,3 +366,30 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 video=val,
                 caption=caption,
                 reply_markup=share_kb,
+                parse_mode="HTML"
+            )
+
+        return
+
+    if text:
+        await msg.reply_text("❌ Bunday kod topilmadi")
+
+
+# ================= MAIN =================
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("cancel", lambda u, c: context.user_data.clear() or u.message.reply_text("❌ Bekor qilindi")))
+    app.add_handler(CommandHandler("admin", admin_command))
+
+    app.add_handler(CallbackQueryHandler(admin_panel))
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
+    print("Bot ishga tushdi...")
+    app.run_polling(drop_pending_updates=True)
+
+
+if __name__ == "__main__":
+    main()
