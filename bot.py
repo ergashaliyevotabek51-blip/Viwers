@@ -167,14 +167,28 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     user = users.get(uid,{"used":0,"referrals":0})
     mode = context.user_data.get("mode")
-    if uid not in users:
-        users[uid] = user
 
-    if text.lower()=="/cancel":
-        context.user_data.clear()
-        await update.message.reply_text("❌ Bekor qilindi")
+    # --- 1️⃣ ADMIN LIMIT BLOKI --- ✅ shu yerga qo‘shiladi
+    if uid in ADMIN_IDS and text.lower().startswith("limit "):
+        try:
+            _, target_uid, extra = text.split()
+            extra = int(extra)
+            target_uid = str(target_uid)
+
+            if target_uid in users:
+                users[target_uid]["referrals"] += extra // 5
+                save_users(users)
+                new_max = max_limit(users[target_uid])
+                await update.message.reply_text(
+                    f"✅ User {target_uid} ga qo‘shimcha limit berildi!\n"
+                    f"Yangi referrals: {users[target_uid]['referrals']}\n"
+                    f"Jami limit: {new_max}"
+                )
+            else:
+                await update.message.reply_text("❌ Bunday user topilmadi")
+        except:
+            await update.message.reply_text("Format noto‘g‘ri!\nMisol: limit 123456789 15")
         return
-
     # ================= ADMIN LIMIT QO‘SHISH =================
 if uid in ADMIN_IDS and text.lower().startswith("limit "):
     try:
