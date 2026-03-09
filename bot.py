@@ -11,7 +11,7 @@ from telegram.ext import (
 )
 
 # ================= CONFIG =================
-TOKEN = "BOT_TOKEN"  # BotFather token
+TOKEN = "8370792264:AAFC0Zym1W3t_2yI1AipjI-lhmjouwclFNI"  # BotFather token
 BOT_USERNAME = "UzbekFilmTV_bot"
 
 # Bir nechta admin
