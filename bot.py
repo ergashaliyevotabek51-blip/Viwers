@@ -16,8 +16,7 @@ BOT_USERNAME = "UzbekFilmTV_bot"
 
 # Bir nechta admin
 ADMIN_IDS = [774440841, 7818576058]
-
-# Majburiy kanallar (username list)
+# Majburiy kanallar
 MANDATORY_CHANNELS = []
 
 # Fayllar
@@ -48,6 +47,11 @@ def random_movie(movies_dict):
         return None
     return random.choice(list(movies_dict.keys()))
 
+def max_limit(user):
+    FREE_LIMIT = 5
+    REF_LIMIT = 5
+    return FREE_LIMIT + user.get("referrals",0)*REF_LIMIT
+
 # ================= ADMIN KEYBOARD =================
 def admin_keyboard():
     return InlineKeyboardMarkup([
@@ -65,71 +69,98 @@ def admin_keyboard():
         ]
     ])
 
-# ================= COMMANDS =================
+# ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    fname = update.effective_user.first_name
     if uid not in users:
-        users[uid] = {"used":0}
+        users[uid] = {"used":0,"referrals":0}
+
     # Majburiy obuna tekshirish
     if not await is_subscribed(context, uid):
         await send_subscription_message(update.message)
         return
-    await update.message.reply_text("🎬 Kino kodi yuboring yoki admin uchun /admin yozing")
 
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if not is_admin(uid):
-        await update.message.reply_text("❌ Siz admin emassiz")
-        return
-    await update.message.reply_text("🛠 Admin panel", reply_markup=admin_keyboard())
+    text = (
+        f"Assalomu alaykum, {fname}! 👋\n\n"
+        f"🎬 <b>UzbekFilmTV</b> — eng sara o‘zbek filmlari shu yerdagi bot!\n\n"
+        f"🔥 Kod yuboring (masalan: 12, 45, 107) → kino darhol keladi\n"
+        f"• Bepul: 5 ta   • Do‘st uchun: +5 ta\n\n"
+        f"🚀 Kodni yozing yoki do‘stlaringizni taklif qiling!"
+    )
 
-# ================= CALLBACKS =================
-async def admin_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = [
+        [InlineKeyboardButton("🎟 Mening limitim", callback_data="my_limit")],
+        [InlineKeyboardButton("🎬 Random film", callback_data="rand_movie")],
+        [InlineKeyboardButton("🔥 Trend film", callback_data="trend_movie")]
+    ]
+    if is_admin(uid):
+        kb.append([InlineKeyboardButton("🛠 Admin panel", callback_data="admin")])
+
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
+
+# ================= CALLBACK HANDLER =================
+async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     uid = q.from_user.id
+    data = q.data
+
+    # ================= USER BUTTONS =================
+    if data=="my_limit":
+        user = users.get(str(uid),{"used":0,"referrals":0})
+        await q.message.reply_text(f"🔢 Sizning limitingiz: {user['used']}/{max_limit(user)}\nDo‘stlar: {user['referrals']}")
+        return
+
+    elif data=="rand_movie":
+        code=random_movie(movies)
+        if code:
+            await q.message.reply_text(f"🎬 Random film kodi: {code}")
+        return
+
+    elif data=="trend_movie":
+        top = trending(movies)
+        text="🔥 Trend filmlar:\n"
+        for i,(code,m) in enumerate(top,1):
+            text+=f"{i}. {m['name']} — {m['views']}\n"
+        await q.message.reply_text(text)
+        return
+
+    # ================= ADMIN =================
     if not is_admin(uid):
         return
-    data = q.data
-    mode = context.user_data.get("mode")
 
-    # ================= ADMIN FUNCTIONS =================
-    if data=="add_movie":
+    mode = context.user_data.get("mode")
+    if data=="admin":
+        await q.message.reply_text("🛠 Admin panel", reply_markup=admin_keyboard())
+    elif data=="add_movie":
         context.user_data["mode"]="add_movie"
         await q.message.reply_text("Kino postini forward qiling")
-
     elif data=="delete_movie":
         context.user_data["mode"]="delete_movie"
         await q.message.reply_text("O‘chirish uchun kino kodini yuboring")
-
     elif data=="stats":
         await q.message.reply_text(f"👥 Userlar: {len(users)}\n🎬 Kinolar: {len(movies)}")
-
     elif data=="top_movies":
         top = trending(movies)
-        text = "🔥 Top 10 filmlar\n\n"
+        text="🔥 Top 10 filmlar\n\n"
         for i,(code,m) in enumerate(top,1):
-            text += f"{i}. {m['name']} — {m['views']}\n"
+            text+=f"{i}. {m['name']} — {m['views']}\n"
         await q.message.reply_text(text)
-
     elif data=="broadcast":
         context.user_data["mode"]="wait_broadcast"
-        await q.message.reply_text("📢 Omaviy xabar rejimi.\nXabar yuboring. /cancel bilan bekor qilish")
-
+        await q.message.reply_text("📢 Omaviy xabar rejimi. Xabar yuboring. /cancel bilan bekor qilish")
     elif data=="subscription":
         context.user_data["mode"]="set_subscription"
         current = ", ".join(MANDATORY_CHANNELS) if MANDATORY_CHANNELS else "Majburiy kanal yo‘q"
         await q.message.reply_text(
             f"Hozirgi majburiy kanallar: {current}\n"
-            "Yangi kanal username yuboring (masalan: @MyChannel)\n"
-            "Yo‘q qilish uchun: off yoki yo‘q"
+            "Yangi kanal username yuboring (masalan: @MyChannel)\nYo‘q qilish uchun: off yoki yo‘q"
         )
-
     elif data=="next_movie":
         code=random_movie(movies)
         if code:
             await q.message.reply_text(f"🎬 Keyingi kino kodi: {code}")
-
     elif data=="check_sub":
         if await is_subscribed(context, uid):
             await q.edit_message_text("✅ Hammaga obuna! Botdan foydalanishingiz mumkin!")
@@ -138,20 +169,21 @@ async def admin_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= MESSAGE HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
+    uid = str(update.effective_user.id)
     text = (update.message.text or "").strip()
+    user = users.get(uid,{"used":0,"referrals":0})
     mode = context.user_data.get("mode")
-    if uid not in users:
-        users[uid] = {"used":0}
 
-    # ================= CANCEL =================
+    if uid not in users:
+        users[uid] = user
+
     if text.lower()=="/cancel":
         context.user_data.clear()
         await update.message.reply_text("❌ Bekor qilindi")
         return
 
     # ================= SUBSCRIPTION =================
-    if mode=="set_subscription" and is_admin(uid):
+    if mode=="set_subscription" and is_admin(int(uid)):
         global MANDATORY_CHANNELS
         if text.lower() in ["off","yo‘q"]:
             MANDATORY_CHANNELS=[]
@@ -159,14 +191,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             ch = text.strip()
             if not ch.startswith("@"):
-                ch = "@" + ch
+                ch = "@"+ch
             MANDATORY_CHANNELS.append(ch)
             await update.message.reply_text(f"✅ Kanal qo‘shildi: {ch}")
         context.user_data.pop("mode",None)
         return
 
     # ================= BROADCAST =================
-    if mode=="wait_broadcast" and is_admin(uid):
+    if mode=="wait_broadcast" and is_admin(int(uid)):
         context.user_data["mode"]="sending_broadcast"
         await update.message.reply_text("📤 Yuborilmoqda...")
         success=0
@@ -180,15 +212,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 failed+=1
         context.user_data.clear()
         await update.message.reply_text(
-            f"✅ Omaviy yuborish tugadi!\n"
-            f"Muvaffaqiyatli: {success}\n"
-            f"Muvaffaqiyatsiz: {failed}\n"
-            f"Jami userlar: {total}"
+            f"✅ Omaviy yuborish tugadi!\nMuvaffaqiyatli: {success}\nMuvaffaqiyatsiz: {failed}\nJami userlar: {total}"
         )
         return
 
     # ================= ADD MOVIE =================
-    if mode=="add_movie" and is_admin(uid):
+    if mode=="add_movie" and is_admin(int(uid)):
         if update.message.forward_from_chat:
             context.user_data["movie_msg"]=update.message.forward_from_message_id
             context.user_data["movie_chat"]=update.message.forward_from_chat.id
@@ -196,7 +225,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Endi film nomini yuboring")
             return
 
-    if mode=="movie_name" and is_admin(uid):
+    if mode=="movie_name" and is_admin(int(uid)):
         name=text
         code=str(len(movies)+1)
         chat=str(context.user_data["movie_chat"]).replace("-100","")
@@ -209,7 +238,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ================= DELETE MOVIE =================
-    if mode=="delete_movie" and is_admin(uid):
+    if mode=="delete_movie" and is_admin(int(uid)):
         if text in movies:
             del movies[text]
             save_movies(movies)
@@ -221,12 +250,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ================= SHOW MOVIE =================
     if text in movies:
-        if not await is_subscribed(context, uid):
+        if not await is_subscribed(context, int(uid)):
             await send_subscription_message(update.message)
             return
         m = movies[text]
         movies[text]["views"] += 1
-        users[uid]["used"] += 1
+        user["used"] += 1
         save_movies(movies)
         kb=InlineKeyboardMarkup([
             [InlineKeyboardButton("▶️ Keyingi film", callback_data="next_movie")],
@@ -261,8 +290,7 @@ async def send_subscription_message(message):
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start",start))
-    app.add_handler(CommandHandler("admin",admin_panel))
-    app.add_handler(CallbackQueryHandler(admin_callbacks))
+    app.add_handler(CallbackQueryHandler(callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,message_handler))
     print("Bot ishga tushdi...")
     app.run_polling()
