@@ -1,18 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-UzbekFilmTv_bot — TO‘LIQ, BARQAROR va hammasi ishlaydigan versiya
-2025-yil holatiga moslashtirilgan
-
-Muhim xususiyatlar:
-- Majburiy obuna (bir nechta kanal)
-- Obuna bo‘lmaguncha kino chiqmaydi
-- Har bir kanal tugmasida obuna holati (✅ / ❌)
-- "Tekshirish" tugmasi real vaqtda yangilanadi
-- Hammaga obuna bo‘lganda stiker + xabar
-- Bir nechta admin qo‘llab-quvvatlanadi
-- Eng ko‘p terilgan filmlar statistikasi (kod + nom)
-"""
-
 import os
 import json
 import asyncio
@@ -58,8 +43,7 @@ def load_settings():
             with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 MANDATORY_CHANNELS = data.get("mandatory_channels", [])
-        except Exception as e:
-            print(f"settings yuklash xatosi: {e}")
+        except:
             MANDATORY_CHANNELS = []
 
 
@@ -68,8 +52,8 @@ def save_settings():
     try:
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
             json.dump({"mandatory_channels": MANDATORY_CHANNELS}, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"settings saqlash xatosi: {e}")
+    except:
+        pass
 
 
 load_settings()
@@ -89,8 +73,8 @@ def save_stats(data: dict):
     try:
         with open(STATS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"stats saqlash xatosi: {e}")
+    except:
+        pass
 
 # ================= Fayl bilan ishlash =================
 def load_users() -> dict:
@@ -101,8 +85,6 @@ def load_users() -> dict:
         with open(USERS_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except:
-        data = {}
-    if isinstance(data, list):
         return {}
     return {str(k): v for k, v in data.items()}
 
@@ -167,8 +149,6 @@ def admin_keyboard():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     args = context.args
-
-    print(f"[START] UserID: {user.id} | @{user.username or 'yo‘q'}")
 
     if MANDATORY_CHANNELS and not await is_subscribed(context, user.id):
         await send_subscription_message(update, context)
@@ -347,6 +327,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     mode = context.user_data.get("mode")
 
+    # Admin funksiyalari
     if user_id in ADMIN_IDS:
         if mode == "set_subscription":
             global MANDATORY_CHANNELS
@@ -416,9 +397,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text not in stats:
             stats[text] = {"count": 0, "name": "Noma'lum film"}
         stats[text]["count"] += 1
-        # film nomini movies dan olish (agar format mos bo'lsa)
-        if "|" in movies[text]:
-            parts = movies[text].split("|")
+        # film nomini movies dan olish
+        val = movies[text]
+        if "|" in val:
+            parts = val.split("|")
             if len(parts) > 1:
                 stats[text]["name"] = parts[-1].strip()
         save_stats(stats)
