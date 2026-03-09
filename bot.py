@@ -20,7 +20,7 @@ if not TOKEN:
     print("BOT_TOKEN topilmadi!")
     exit(1)
 
-ADMIN_IDS = [774440841]  # ← O‘ZINGIZNING HAQIQIY ID’INGIZNI SHU YERGA YOZING!
+ADMIN_IDS = [774440841, 7818576058]  # ← O‘ZINGIZNING HAQIQIY ID’INGIZNI SHU YERGA YOZING!
 
 BOT_USERNAME = "UzbekFilmTv_bot"
 CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"
@@ -85,6 +85,8 @@ def load_users() -> dict:
         with open(USERS_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except:
+        data = {}
+    if isinstance(data, list):
         return {}
     return {str(k): v for k, v in data.items()}
 
@@ -327,7 +329,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     mode = context.user_data.get("mode")
 
-    # Admin funksiyalari
     if user_id in ADMIN_IDS:
         if mode == "set_subscription":
             global MANDATORY_CHANNELS
@@ -353,7 +354,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop("mode", None)
             return
 
-        # qolgan admin modlari (broadcast, limit, add/delete) — oldingi kod saqlanadi
         return
 
     # Majburiy obuna tekshiruvi — eng yuqorida!
@@ -397,7 +397,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text not in stats:
             stats[text] = {"count": 0, "name": "Noma'lum film"}
         stats[text]["count"] += 1
-        # film nomini movies dan olish
         val = movies[text]
         if "|" in val:
             parts = val.split("|")
