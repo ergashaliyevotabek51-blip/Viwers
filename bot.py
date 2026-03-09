@@ -175,6 +175,30 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Bekor qilindi")
         return
 
+    # ================= ADMIN LIMIT QO‘SHISH =================
+if uid in ADMIN_IDS and text.lower().startswith("limit "):
+    try:
+        # format: limit USER_ID QO‘SHILADIGAN_LIMIT
+        _, target_uid, extra = text.split()
+        extra = int(extra)
+        target_uid = str(target_uid)
+
+        if target_uid in users:
+            # REF_LIMIT = 5, shuning uchun qo‘shish uchun referral hisoblaymiz
+            users[target_uid]["referrals"] += extra // 5
+            save_users(users)
+            new_max = max_limit(users[target_uid])
+            await update.message.reply_text(
+                f"✅ User {target_uid} ga qo‘shimcha limit berildi!\n"
+                f"Yangi referrals: {users[target_uid]['referrals']}\n"
+                f"Jami limit: {new_max}"
+            )
+        else:
+            await update.message.reply_text("❌ Bunday user topilmadi")
+    except:
+        await update.message.reply_text("Format noto‘g‘ri!\nMisol: limit 123456789 15")
+    return
+
     # ================= SUBSCRIPTION =================
     if mode=="set_subscription" and is_admin(int(uid)):
         global MANDATORY_CHANNELS
