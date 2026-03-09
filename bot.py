@@ -16,21 +16,16 @@ from telegram.error import TelegramError
 
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
-if not TOKEN:
-    print("BOT_TOKEN topilmadi!")
-    exit(1)
-
-ADMIN_IDS = [774440841, 7818576058]  # ← O‘ZINGIZNING ID’INGIZ + qo‘shimcha adminlar
+ADMIN_IDS = [774440841]  # o'zingizning ID + qo'shimcha adminlar
 
 BOT_USERNAME = "UzbekFilmTv_bot"
 CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"
 
-MANDATORY_CHANNELS = []  # ["@kanal1", "@kanal2"] — admin paneldan qo‘shiladi
+MANDATORY_CHANNELS = []  # admin paneldan qo'shiladi
 
 USERS_FILE = "users.json"
 MOVIES_FILE = "movies.json"
 SETTINGS_FILE = "settings.json"
-STATS_FILE = "stats.json"
 
 FREE_LIMIT = 5
 REF_LIMIT = 5
@@ -58,26 +53,8 @@ def save_settings():
 
 load_settings()
 
-# ================= STATISTIKA =================
-def load_stats() -> dict:
-    if os.path.exists(STATS_FILE):
-        try:
-            with open(STATS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-
-def save_stats(data: dict):
-    try:
-        with open(STATS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except:
-        pass
-
 # ================= Fayl bilan ishlash =================
-def load_users() -> dict:
+def load_users():
     if not os.path.exists(USERS_FILE):
         save_users({})
         return {}
@@ -91,7 +68,7 @@ def load_users() -> dict:
     return {str(k): v for k, v in data.items()}
 
 
-def save_users(data: dict):
+def save_users(data):
     try:
         with open(USERS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -99,7 +76,7 @@ def save_users(data: dict):
         pass
 
 
-def load_movies() -> dict:
+def load_movies():
     if not os.path.exists(MOVIES_FILE):
         return {}
     try:
@@ -109,7 +86,7 @@ def load_movies() -> dict:
         return {}
 
 
-def save_movies(data: dict):
+def save_movies(data):
     try:
         with open(MOVIES_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -117,7 +94,7 @@ def save_movies(data: dict):
         pass
 
 
-def get_user(users: dict, user_id: int) -> dict:
+def get_user(users, user_id):
     uid = str(user_id)
     if uid not in users:
         users[uid] = {"used": 0, "referrals": 0, "joined": datetime.utcnow().isoformat()}
@@ -125,26 +102,18 @@ def get_user(users: dict, user_id: int) -> dict:
     return users[uid]
 
 
-def max_limit(user: dict) -> int:
+def max_limit(user):
     return FREE_LIMIT + user["referrals"] * REF_LIMIT
 
 # ================= ADMIN KEYBOARD =================
 def admin_keyboard():
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("➕ Kino qo‘shish", callback_data="add"),
-            InlineKeyboardButton("➖ Kino o‘chirish", callback_data="delete"),
-        ],
-        [
-            InlineKeyboardButton("📃 Kinolar ro‘yxati", callback_data="list_movies"),
-            InlineKeyboardButton("📊 Statistika", callback_data="stats"),
-        ],
-        [
-            InlineKeyboardButton("📢 Omaviy xabar yuborish", callback_data="broadcast"),
-        ],
-        [
-            InlineKeyboardButton("🔒 Majburiy obuna sozlamalari", callback_data="subscription"),
-        ],
+        [InlineKeyboardButton("➕ Kino qo‘shish", callback_data="add")],
+        [InlineKeyboardButton("➖ Kino o‘chirish", callback_data="delete")],
+        [InlineKeyboardButton("📃 Kinolar ro‘yxati", callback_data="list_movies")],
+        [InlineKeyboardButton("📊 Statistika", callback_data="stats")],
+        [InlineKeyboardButton("📢 Omaviy xabar", callback_data="broadcast")],
+        [InlineKeyboardButton("🔒 Majburiy obuna", callback_data="subscription")],
     ])
 
 # ================= START =================
@@ -153,7 +122,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
 
     if MANDATORY_CHANNELS and not await is_subscribed(context, user.id):
-        await send_subscription_message(update, context)
+        await send_subscription_message(update.message)
         return
 
     users = load_users()
@@ -170,7 +139,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"<b>Assalomu alaykum, {user.first_name}!</b> 👋\n\n"
         f"🎬 <b>UzbekFilmTV</b> — eng sara o‘zbek filmlari shu yerdagi bot!\n\n"
         f"🔥 Kod yuboring (masalan: 12, 45, 107) → kino darhol keladi\n"
-        f"• Bepul limit: <b>5 ta</b>\n"
+        f"• Bepul limit: <b>5 ta kino</b>\n"
         f"• Har bir do‘st taklif qilsangiz → +5 ta limit qo‘shiladi\n\n"
         f"🚀 Tayyormisiz? Kodni yuboring yoki do‘stlaringizni taklif qiling!"
     )
@@ -207,43 +176,25 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     users = load_users()
     movies = load_movies()
-    stats = load_stats()
 
     if data == "stats":
-        text = f"👥 Userlar: {len(users)}\n🎬 Kinolar: {len(movies)}\n\n"
-
-        if stats:
-            text += "🔥 Eng ko‘p terilgan kodlar:\n"
-            sorted_stats = sorted(stats.items(), key=lambda x: x[1], reverse=True)[:10]
-            for code, count in sorted_stats:
-                text += f"• {code}: {count} marta\n"
-        else:
-            text += "Hozircha statistika yo‘q."
-
-        await q.message.reply_text(text)
+        await q.message.reply_text(f"👥 Userlar: {len(users)}\n🎬 Kinolar: {len(movies)}")
         return
 
     if data == "list_movies":
-        if not movies:
-            text = "Hozircha kinolar yo‘q."
-        else:
-            text = "Kinolar ro‘yxati:\n" + "\n".join(f"• {code}" for code in sorted(movies.keys()))
+        text = "Hozircha kinolar yo‘q." if not movies else "\n".join(f"• {code}" for code in sorted(movies.keys()))
         await q.message.reply_text(text)
         return
 
     if data == "broadcast":
-        context.user_data["mode"] = "wait_broadcast"
-        await q.message.reply_text(
-            "📢 Omaviy xabar yuborish\n\n"
-            "Xabarni yuboring yoki forward qiling.\n"
-            "Bekor qilish: /cancel"
-        )
+        context.user_data["mode"] = "broadcast"
+        await q.message.reply_text("Xabarni yuboring yoki forward qiling.\n/cancel — bekor")
         return
 
     if data == "subscription":
-        current = "\n".join(MANDATORY_CHANNELS) if MANDATORY_CHANNELS else "Majburiy obuna yo‘q"
+        current = "\n".join(MANDATORY_CHANNELS) or "Majburiy obuna yo‘q"
         text = f"Hozirgi majburiy kanallar:\n{current}\n\n"
-        text += "Yangi kanallarni qo‘shish uchun: @kanal1 @kanal2 formatida yuboring\n"
+        text += "Yangi kanallarni qo‘shish uchun: @kanal1 @kanal2 yozing\n"
         text += "Tozalash uchun: clear yoki off deb yozing"
         context.user_data["mode"] = "subscription"
         await q.message.reply_text(text)
@@ -251,68 +202,47 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data in ["add", "delete"]:
         context.user_data["mode"] = data
-        msg = "Format:\n`kod|file_id yoki kanal link|film_nomi`" if data == "add" else "O‘chirish uchun kodni yuboring"
+        msg = "Format:\n`kod|file_id yoki link|film_nomi`" if data == "add" else "O‘chirish uchun kodni yuboring"
         await q.message.reply_text(msg)
         return
 
-# ================= Obuna funksiyalari =================
+# ================= OBUNA FUNKSİYALARI =================
 async def is_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
     if not MANDATORY_CHANNELS:
         return True
-
     for channel in MANDATORY_CHANNELS:
         try:
             member = await context.bot.get_chat_member(channel, user_id)
             if member.status not in ["member", "administrator", "creator"]:
                 return False
-        except TelegramError as e:
-            print(f"Obuna tekshirish xatosi {channel}: {e}")
+        except:
             return False
     return True
 
 
-async def send_subscription_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def send_subscription_message(message):
     if not MANDATORY_CHANNELS:
-        await update.message.reply_text("Majburiy obuna sozlanmagan.")
+        await message.reply_text("Majburiy obuna sozlanmagan.")
         return
 
     kb = []
-    all_subscribed = True
-
     for channel in MANDATORY_CHANNELS:
         clean = channel.lstrip('@')
-        try:
-            member = await context.bot.get_chat_member(channel, update.effective_user.id)
-            subscribed = member.status in ["member", "administrator", "creator"]
-        except:
-            subscribed = False
-
-        emoji = "✅" if subscribed else "📣"
         kb.append([InlineKeyboardButton(
-            f"{emoji} {clean} ga obuna bo‘lish",
+            f"📣 {clean} ga obuna bo‘lish",
             url=f"https://t.me/{clean}"
         )])
 
-        if not subscribed:
-            all_subscribed = False
-
-    kb.append([InlineKeyboardButton(
-        "✅ Obuna bo‘ldim, tekshirish" if not all_subscribed else "Botdan foydalanish",
-        callback_data="check_sub"
-    )])
+    kb.append([InlineKeyboardButton("✅ Obuna bo‘ldim, tekshirish", callback_data="check_sub")])
 
     channels_text = "\n".join(f"• {ch}" for ch in MANDATORY_CHANNELS)
 
-    text = (
+    await message.reply_text(
         f"Botdan foydalanish uchun quyidagi kanallarga obuna bo‘ling:\n\n"
         f"{channels_text}\n\n"
-        "Obuna bo‘lgach «Tekshirish» tugmasini bosing!"
+        "Obuna bo‘lgandan keyin tugmani bosing!",
+        reply_markup=InlineKeyboardMarkup(kb)
     )
-
-    if all_subscribed:
-        text = "🎉 Hammaga obuna bo‘lgansiz!\n\nEndi botdan foydalanishingiz mumkin! 🍿"
-
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
 
 # ================= MESSAGE HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -327,7 +257,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     mode = context.user_data.get("mode")
 
-    # Majburiy obuna sozlash — faqat admin
+    # Majburiy obuna sozlash
     if mode == "subscription" and user_id in ADMIN_IDS:
         global MANDATORY_CHANNELS
         t = text.lower().strip()
@@ -335,29 +265,26 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if t in ["clear", "off", "yo‘q"]:
             MANDATORY_CHANNELS = []
             save_settings()
-            await msg.reply_text("✅ Majburiy obuna o‘chirildi")
-            context.user_data.pop("mode", None)
-            return
-
-        added = []
-        for ch in text.split():
-            ch = ch.strip()
-            if ch.startswith("@") and ch not in MANDATORY_CHANNELS:
-                try:
-                    await context.bot.get_chat(ch)
-                    MANDATORY_CHANNELS.append(ch)
-                    added.append(ch)
-                except:
-                    await msg.reply_text(f"Xato: {ch} — bot admin emas yoki topilmadi")
-        if added:
-            save_settings()
-            await msg.reply_text(f"Qo‘shildi: {', '.join(added)}\n\nYangi ro‘yxat:\n{', '.join(MANDATORY_CHANNELS) or 'bo‘sh'}")
-
+            await msg.reply_text("✅ Majburiy kanallar tozalandi")
+        else:
+            added = []
+            for ch in text.split():
+                ch = ch.strip()
+                if ch.startswith("@") and ch not in MANDATORY_CHANNELS:
+                    try:
+                        await context.bot.get_chat(ch)
+                        MANDATORY_CHANNELS.append(ch)
+                        added.append(ch)
+                    except:
+                        pass
+            if added:
+                save_settings()
+                await msg.reply_text(f"Qo‘shildi: {', '.join(added)}")
         context.user_data.pop("mode", None)
         return
 
-    # Broadcast — faqat admin
-    if mode == "wait_broadcast" and user_id in ADMIN_IDS:
+    # Broadcast
+    if mode == "broadcast" and user_id in ADMIN_IDS:
         context.user_data["mode"] = "sending_broadcast"
         await msg.reply_text("Yuborilmoqda...")
 
@@ -383,7 +310,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Admin limit qo‘shish — faqat admin
+    # Admin limit qo‘shish
     if user_id in ADMIN_IDS and text.lower().startswith("limit "):
         try:
             _, target_uid, extra = text.split()
@@ -406,7 +333,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Format noto‘g‘ri!\nMisol: limit 123456789 15")
         return
 
-    # Kino qo‘shish / o‘chirish — faqat admin
+    # Kino qo‘shish / o‘chirish
     if user_id in ADMIN_IDS and mode in ["add", "delete"]:
         if mode == "add":
             if "|" not in text:
@@ -418,15 +345,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name = parts[2].strip() if len(parts) > 2 else "Noma'lum film"
             movies[code] = val
             save_movies(movies)
-
-            # Statistika uchun nomni saqlash
-            stats = load_stats()
-            if code not in stats:
-                stats[code] = {"count": 0, "name": name}
-            else:
-                stats[code]["name"] = name
-            save_stats(stats)
-
             await msg.reply_text(f"✅ Kino qo‘shildi!\nKod: {code}\nFilm: {name}")
         elif mode == "delete":
             if text in movies:
