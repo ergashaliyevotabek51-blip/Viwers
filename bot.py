@@ -40,7 +40,7 @@ def save_movies(data):
         json.dump(data,f)
 
 def trending(movies_dict):
-    return sorted(movies_dict.items(), key=lambda x:x[1]["views"], reverse=True)[:10]
+    return sorted(movies_dict.items(), key=lambda x:x[1].get("views",0), reverse=True)[:10]
 
 def random_movie(movies_dict):
     if not movies_dict:
@@ -73,8 +73,8 @@ def admin_keyboard():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     fname = update.effective_user.first_name
-    if uid not in users:
-        users[uid] = {"used":0,"referrals":0}
+    if str(uid) not in users:
+        users[str(uid)] = {"used":0,"referrals":0}
 
     # Majburiy obuna tekshirish
     if not await is_subscribed(context, uid):
@@ -113,16 +113,27 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     elif data=="rand_movie":
-        code=random_movie(movies)
+        code = random_movie(movies)
         if code:
-            await q.message.reply_text(f"🎬 Random film kodi: {code}")
+            m = movies[code]
+            # Inline tugmalar
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("▶️ Keyingi film", callback_data="next_movie")],
+                [InlineKeyboardButton("🔗 Ulashish", url=f"https://t.me/{BOT_USERNAME}")]
+            ])
+            await q.message.reply_text(
+                f"🎬 {m['name']}\n📥 Yuklab olish: {m['file']}", 
+                reply_markup=kb
+            )
+        else:
+            await q.message.reply_text("❌ Hozircha kinolar yo‘q")
         return
 
     elif data=="trend_movie":
         top = trending(movies)
         text="🔥 Trend filmlar:\n"
         for i,(code,m) in enumerate(top,1):
-            text+=f"{i}. {m['name']} — {m['views']}\n"
+            text+=f"{i}. {m['name']} — {m.get('views',0)}\n"
         await q.message.reply_text(text)
         return
 
@@ -145,7 +156,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         top = trending(movies)
         text="🔥 Top 10 filmlar\n\n"
         for i,(code,m) in enumerate(top,1):
-            text+=f"{i}. {m['name']} — {m['views']}\n"
+            text+=f"{i}. {m['name']} — {m.get('views',0)}\n"
         await q.message.reply_text(text)
     elif data=="broadcast":
         context.user_data["mode"]="wait_broadcast"
@@ -160,7 +171,12 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data=="next_movie":
         code=random_movie(movies)
         if code:
-            await q.message.reply_text(f"🎬 Keyingi kino kodi: {code}")
+            m = movies[code]
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("▶️ Keyingi film", callback_data="next_movie")],
+                [InlineKeyboardButton("🔗 Ulashish", url=f"https://t.me/{BOT_USERNAME}")]
+            ])
+            await q.message.reply_text(f"🎬 {m['name']}\n📥 Yuklab olish: {m['file']}", reply_markup=kb)
     elif data=="check_sub":
         if await is_subscribed(context, uid):
             await q.edit_message_text("✅ Hammaga obuna! Botdan foydalanishingiz mumkin!")
