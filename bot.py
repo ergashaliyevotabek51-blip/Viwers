@@ -40,6 +40,7 @@ def load_settings():
                 MANDATORY_CHANNELS = data.get("mandatory_channels", [])
         except Exception as e:
             print(f"settings yuklash xatosi: {e}")
+            MANDATORY_CHANNELS = []
 
 
 def save_settings():
@@ -54,7 +55,7 @@ def save_settings():
 load_settings()
 
 # ================= Fayl bilan ishlash =================
-def load_users():
+def load_users() -> dict:
     if not os.path.exists(USERS_FILE):
         save_users({})
         return {}
@@ -68,7 +69,7 @@ def load_users():
     return {str(k): v for k, v in data.items()}
 
 
-def save_users(data):
+def save_users(data: dict):
     try:
         with open(USERS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -76,7 +77,7 @@ def save_users(data):
         pass
 
 
-def load_movies():
+def load_movies() -> dict:
     if not os.path.exists(MOVIES_FILE):
         return {}
     try:
@@ -86,7 +87,7 @@ def load_movies():
         return {}
 
 
-def save_movies(data):
+def save_movies(data: dict):
     try:
         with open(MOVIES_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -94,7 +95,7 @@ def save_movies(data):
         pass
 
 
-def get_user(users, user_id):
+def get_user(users: dict, user_id: int) -> dict:
     uid = str(user_id)
     if uid not in users:
         users[uid] = {"used": 0, "referrals": 0, "joined": datetime.utcnow().isoformat()}
@@ -102,7 +103,7 @@ def get_user(users, user_id):
     return users[uid]
 
 
-def max_limit(user):
+def max_limit(user: dict) -> int:
     return FREE_LIMIT + user["referrals"] * REF_LIMIT
 
 # ================= ADMIN KEYBOARD =================
@@ -182,7 +183,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # qolgan tugmalar (stats, list_movies, broadcast, subscription) — oldingi kod saqlanadi
     await q.edit_message_text("Ishlamayapti tugma: " + data)  # test uchun, keyin o'chirib tashlang
-
 
 # ================= OBUNA FUNKSİYALARI =================
 async def is_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
@@ -343,30 +343,3 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 video=val,
                 caption=caption,
                 reply_markup=share_kb,
-                parse_mode="HTML"
-            )
-
-        return
-
-    if text:
-        await msg.reply_text("❌ Bunday kod topilmadi")
-
-
-# ================= MAIN =================
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("cancel", lambda u, c: context.user_data.clear() or u.message.reply_text("❌ Bekor qilindi")))
-    app.add_handler(CommandHandler("admin", admin_command))
-
-    app.add_handler(CallbackQueryHandler(admin_panel))
-
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-
-    print("Bot ishga tushdi...")
-    app.run_polling(drop_pending_updates=True)
-
-
-if __name__ == "__main__":
-    main()
