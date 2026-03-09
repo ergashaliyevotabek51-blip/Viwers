@@ -23,6 +23,7 @@ BOT_USERNAME = "UzbekFilmTV_bot"
 ADMIN_IDS = [774440841, 7818576058]
 
 BOT_USERNAME = "UzbekFilmTv_bot"
+CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"
 
 USERS_FILE = "users.json"
 MOVIES_FILE = "movies.json"
@@ -31,27 +32,11 @@ SETTINGS_FILE = "settings.json"
 FREE_LIMIT = 5
 REF_LIMIT = 5
 
-# ================= SETTINGS =================
-def load_settings():
-    default = {"mandatory_channels": [], "admins": ADMIN_IDS}
-    if not os.path.exists(SETTINGS_FILE):
-        save_json(SETTINGS_FILE, default)
-        return default
-    try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return default
-
+# ================= HELPERS =================
 def save_json(file, data):
     with open(file,'w',encoding='utf-8') as f:
         json.dump(data,f,ensure_ascii=False,indent=2)
 
-settings = load_settings()
-MANDATORY_CHANNELS = settings.get("mandatory_channels", [])
-ADMIN_IDS = settings.get("admins", ADMIN_IDS)
-
-# ================= USERS & MOVIES =================
 def load_json_file(file, default):
     if not os.path.exists(file):
         save_json(file, default)
@@ -62,6 +47,12 @@ def load_json_file(file, default):
     except:
         return default
 
+# ================= SETTINGS =================
+settings = load_json_file(SETTINGS_FILE, {"mandatory_channels": [], "admins": ADMIN_IDS})
+MANDATORY_CHANNELS = settings.get("mandatory_channels", [])
+ADMIN_IDS = settings.get("admins", ADMIN_IDS)
+
+# ================= USERS & MOVIES =================
 users = load_json_file(USERS_FILE, {})
 movies = load_json_file(MOVIES_FILE, {})
 
@@ -115,30 +106,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     u = get_user(user.id)
 
-    if not await is_subscribed(context, user.id):
+    if MANDATORY_CHANNELS and not await is_subscribed(context, user.id):
         await send_subscription_message(update.message)
         return
-
-    args = context.args
-    if args and args[0].isdigit():
-        ref_id = args[0]
-        if ref_id != str(user.id) and ref_id in users and u.get("refed") is None:
-            users[ref_id]["referrals"] += 1
-            u["refed"] = ref_id
-            save_users()
 
     text = (
         f"<b>Assalomu alaykum, {user.first_name}!</b> 👋\n\n"
         f"🎬 UzbekFilmTV — eng sara o‘zbek filmlari shu yerdagi bot!\n\n"
         f"🔥 Kod yuboring (masalan: 12, 45, 107) → kino darhol keladi\n"
-        f"• Bepul: 5 ta\n• Do‘st uchun: +5 ta\n\n"
+        f"• Bepul: 5 ta   • Do‘st uchun: +5 ta\n\n"
         f"🚀 Kodni yozing yoki do‘stlaringizni taklif qiling!"
     )
 
     kb=[
         [InlineKeyboardButton("📊 Mening limitim", callback_data="my_limit")],
-        [InlineKeyboardButton("🎬 Random film", callback_data="random_film")],
-        [InlineKeyboardButton("🔥 Trend film", callback_data="trend_film")]
+        [InlineKeyboardButton("🎬 Random Film", callback_data="random_film")],
+        [InlineKeyboardButton("🔥 Trend Film", callback_data="trend_film")]
     ]
     if user.id in ADMIN_IDS:
         kb.append([InlineKeyboardButton("🛠 Admin panel", callback_data="admin")])
@@ -155,7 +138,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if q.data=="check_sub":
         if await is_subscribed(context, uid):
             await q.edit_message_text("✅ Hammaga obuna! Endi botdan foydalanishingiz mumkin!")
-            await q.message.reply_sticker("CAACAgIAAxkBAAEJk1hg1Rj0x1_YourStickerID")
         else:
             await send_subscription_message(q.message)
         return
@@ -164,11 +146,25 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.reply_text(f"📊 Sizning limitingiz: {u['used']}/{max_limit(u)}")
         return
 
+    # Admin panel
+    if q.data=="admin" and uid in ADMIN_IDS:
+        kb = [
+            [InlineKeyboardButton("➕ Kino qo‘shish", callback_data="add")],
+            [InlineKeyboardButton("➖ Kino o‘chirish", callback_data="delete")],
+            [InlineKeyboardButton("📃 Kinolar ro‘yxati", callback_data="list_movies")],
+            [InlineKeyboardButton("📊 Statistika", callback_data="stats")],
+            [InlineKeyboardButton("📢 Omaviy xabar", callback_data="broadcast")],
+            [InlineKeyboardButton("🔒 Majburiy obuna", callback_data="subscription")],
+            [InlineKeyboardButton("🎯 Limit berish", callback_data="give_limit")]
+        ]
+        await q.edit_message_text("🛠 Admin panel", reply_markup=InlineKeyboardMarkup(kb))
+        return
+
 # ================= ADMIN LIMIT =================
 async def handle_admin_limit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
-    uid = str(update.effective_user.id)
-    if int(uid) in ADMIN_IDS and text.lower().startswith("limit "):
+    uid = update.effective_user.id
+    if uid in ADMIN_IDS and text.lower().startswith("limit "):
         try:
             _, target_uid, extra = text.split()
             target_uid = str(target_uid)
@@ -176,7 +172,7 @@ async def handle_admin_limit(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if target_uid in users:
                 users[target_uid]["referrals"] += extra // REF_LIMIT
                 save_users()
-                await update.message.reply_text(f"✅ User {target_uid} ga qo‘shimcha limit berildi!")
+                await update.message.reply_text(f"✅ User {target_uid} ga qo‘shimcha limit berildi!\nYangi limit: {max_limit(users[target_uid])}")
             else:
                 await update.message.reply_text("❌ Bunday user topilmadi")
         except:
@@ -185,8 +181,10 @@ async def handle_admin_limit(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # ================= MESSAGE HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Admin limit qo‘shish
     await handle_admin_limit(update, context)
-    # Shu yerga kino kodi, Random/Trend/Next film, broadcast va referral logikasi qo‘shiladi
+    # Kino kodi yuborish, Random/Trend film va referral logikasi shu yerga qo‘shiladi
+    await update.message.reply_text("🎬 Kodni yuboring yoki admin uchun /admin yozing")
 
 # ================= MAIN =================
 def main():
