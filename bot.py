@@ -16,10 +16,11 @@ from telegram.ext import (
 from telegram.error import TelegramError
 
 # ================= CONFIG =================
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = "8370792264:AAFC0Zym1W3t_2yI1AipjI-lhmjouwclFNI"  # BotFather token
+BOT_USERNAME = "UzbekFilmTV_bot"
 
-# Adminlar
-ADMIN_IDS = [123456789, 987654321]  # Shu yerga boshqa admin ID qo‘shing
+# Bir nechta admin
+ADMIN_IDS = [774440841, 7818576058]
 
 BOT_USERNAME = "UzbekFilmTv_bot"
 CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"
