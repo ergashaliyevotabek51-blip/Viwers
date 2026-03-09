@@ -16,12 +16,7 @@ from telegram.ext import (
 from telegram.error import TelegramError
 
 # ================= CONFIG =================
-TOKEN = "8370792264:AAFC0Zym1W3t_2yI1AipjI-lhmjouwclFNI"  # BotFather token
-BOT_USERNAME = "UzbekFilmTV_bot"
-
-# Bir nechta admin
-ADMIN_IDS = [774440841, 7818576058]
-
+TOKEN = os.getenv("8370792264:AAFC0Zym1W3t_2yI1AipjI-lhmjouwclFNI")
 BOT_USERNAME = "UzbekFilmTv_bot"
 CHANNEL_USERNAME = "@UzbekFilmTv_Kanal"
 
@@ -48,9 +43,9 @@ def load_json_file(file, default):
         return default
 
 # ================= SETTINGS =================
-settings = load_json_file(SETTINGS_FILE, {"mandatory_channels": [], "admins": ADMIN_IDS})
+settings = load_json_file(SETTINGS_FILE, {"mandatory_channels": [], "admins": []})
 MANDATORY_CHANNELS = settings.get("mandatory_channels", [])
-ADMIN_IDS = settings.get("admins", ADMIN_IDS)
+ADMIN_IDS = settings.get("admins", [])
 
 # ================= USERS & MOVIES =================
 users = load_json_file(USERS_FILE, {})
@@ -146,7 +141,26 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.reply_text(f"📊 Sizning limitingiz: {u['used']}/{max_limit(u)}")
         return
 
-    # Admin panel
+    if q.data=="random_film":
+        if not movies:
+            await q.message.reply_text("❌ Hozircha kinolar yo‘q.")
+            return
+        code = random.choice(list(movies.keys()))
+        await send_movie(q.message, uid, code)
+        return
+
+    if q.data=="trend_film":
+        if not movies:
+            await q.message.reply_text("❌ Hozircha kinolar yo‘q.")
+            return
+        # trend = top 10 so‘ralgan kinolar
+        trend = sorted(movies.items(), key=lambda x: x[1].get("used",0), reverse=True)[:10]
+        text="🔥 Trend kinolar:\n"
+        for code, val in trend:
+            text+=f"{code} | {val}\n"
+        await q.message.reply_text(text)
+        return
+
     if q.data=="admin" and uid in ADMIN_IDS:
         kb = [
             [InlineKeyboardButton("➕ Kino qo‘shish", callback_data="add")],
@@ -159,6 +173,17 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         await q.edit_message_text("🛠 Admin panel", reply_markup=InlineKeyboardMarkup(kb))
         return
+
+# ================= SEND MOVIE =================
+async def send_movie(message, uid, code):
+    u = get_user(uid)
+    if u["used"] >= max_limit(u):
+        await message.reply_text("🔒 Limit tugadi! Do‘stlaringizni taklif qiling!")
+        return
+    u["used"] +=1
+    save_users()
+    val = movies[code]
+    await message.reply_text(f"🎬 Kino tayyor: {val}\nQolgan: {max_limit(u)-u['used']}/{max_limit(u)}")
 
 # ================= ADMIN LIMIT =================
 async def handle_admin_limit(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -181,9 +206,7 @@ async def handle_admin_limit(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # ================= MESSAGE HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Admin limit qo‘shish
     await handle_admin_limit(update, context)
-    # Kino kodi yuborish, Random/Trend film va referral logikasi shu yerga qo‘shiladi
     await update.message.reply_text("🎬 Kodni yuboring yoki admin uchun /admin yozing")
 
 # ================= MAIN =================
