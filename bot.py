@@ -19,7 +19,6 @@ FREE_LIMIT=5
 REF_LIMIT=5
 
 DEFAULT_ADMINS=[774440841]
-MANDATORY_CHANNELS=[]
 
 def load_json(file,default):
     try:
@@ -43,6 +42,12 @@ def load_movies():
 
 def save_movies(movies):
     save_json(MOVIES_FILE,movies)
+
+def load_settings():
+    return load_json(SETTINGS_FILE,{"channels":[]})
+
+def save_settings(data):
+    save_json(SETTINGS_FILE,data)
 
 def get_user(users,uid):
     uid=str(uid)
@@ -69,6 +74,21 @@ def random_movie(movies):
         return None
     return random.choice(list(movies.keys()))
 
+async def check_subscription(context,user_id):
+
+    settings=load_settings()
+    channels=settings.get("channels",[])
+
+    for ch in channels:
+        try:
+            member=await context.bot.get_chat_member(ch,user_id)
+            if member.status not in ["member","administrator","creator"]:
+                return False
+        except:
+            return False
+
+    return True
+
 async def start(update:Update,context:ContextTypes.DEFAULT_TYPE):
 
     uid=update.effective_user.id
@@ -78,12 +98,28 @@ async def start(update:Update,context:ContextTypes.DEFAULT_TYPE):
     get_user(users,uid)
     save_users(users)
 
+    if not await check_subscription(context,uid):
+
+        settings=load_settings()
+        channels=settings.get("channels",[])
+
+        buttons=[]
+
+        for ch in channels:
+            buttons.append([InlineKeyboardButton(ch,url=f"https://t.me/{ch.replace('@','')}")])
+
+        await update.message.reply_text(
+        "Botdan foydalanish uchun kanallarga obuna bo‘ling",
+        reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
     text=f"Assalomu alaykum {fname} 👋\n\nKod yuboring va filmni oling."
 
     kb=[
-        [InlineKeyboardButton("🎟 Mening limitim",callback_data="my_limit")],
-        [InlineKeyboardButton("🎬 Random film",callback_data="rand_movie")],
-        [InlineKeyboardButton("🔥 Trend filmlar",callback_data="trend_movie")]
+    [InlineKeyboardButton("🎟 Mening limitim",callback_data="my_limit")],
+    [InlineKeyboardButton("🎬 Random film",callback_data="rand_movie")],
+    [InlineKeyboardButton("🔥 Trend filmlar",callback_data="trend_movie")]
     ]
 
     if is_admin(uid):
@@ -105,9 +141,9 @@ async def callback_handler(update:Update,context:ContextTypes.DEFAULT_TYPE):
     data=q.data
 
     if data=="my_limit":
+
         await q.message.reply_text(
-        f"🔢 Siz ishlatgan: {user['used']}/{max_limit(user)}\n"
-        f"Referal: {user['referrals']}"
+        f"🔢 Siz ishlatgan: {user['used']}/{max_limit(user)}"
         )
 
     elif data=="rand_movie":
@@ -120,25 +156,15 @@ async def callback_handler(update:Update,context:ContextTypes.DEFAULT_TYPE):
 
         m=movies[code]
 
-        kb=InlineKeyboardMarkup([
-        [InlineKeyboardButton("▶️ Keyingi film",callback_data="next_movie")],
-        [InlineKeyboardButton("🎬 Ulashish",url=f"https://t.me/{BOT_USERNAME}")]
-        ])
-
         await context.bot.send_video(
         q.message.chat_id,
         m["file_id"],
-        caption=f"🎬 {m['name']}",
-        reply_markup=kb
+        caption=f"🎬 {m['name']}"
         )
 
     elif data=="trend_movie":
 
         top=trending(movies)
-
-        if not top:
-            await q.message.reply_text("Trend yo‘q")
-            return
 
         text="🔥 Trend filmlar\n\n"
 
@@ -161,57 +187,20 @@ async def callback_handler(update:Update,context:ContextTypes.DEFAULT_TYPE):
 
         await q.message.reply_text("Admin panel",reply_markup=InlineKeyboardMarkup(kb))
 
+    elif data=="add_movie":
+
+        context.user_data["mode"]="add_movie"
+        await q.message.reply_text("Filmni forward qiling")
+
+    elif data=="subscription":
+
+        context.user_data["mode"]="add_channel"
+        await q.message.reply_text("Kanal username yuboring\nMasalan: @kanal")
+
     elif data=="stats":
 
         await q.message.reply_text(
         f"👥 Users: {len(users)}\n🎬 Movies: {len(movies)}"
-        )
-
-    elif data=="top_movies":
-
-        top=trending(movies)
-
-        text="🔥 Top filmlar\n\n"
-
-        for i,(code,m) in enumerate(top,1):
-            text+=f"{i}. {m['name']} — {m.get('views',0)}\n"
-
-        await q.message.reply_text(text)
-
-    elif data=="broadcast":
-
-        context.user_data["mode"]="broadcast"
-        await q.message.reply_text("Xabar yuboring")
-
-    elif data=="delete_movie":
-
-        context.user_data["mode"]="delete_movie"
-        await q.message.reply_text("Film kodini yuboring")
-
-    elif data=="add_limit":
-
-        context.user_data["mode"]="add_limit"
-        await q.message.reply_text("user_id limit")
-
-    elif data=="next_movie":
-
-        code=random_movie(movies)
-
-        if not code:
-            return
-
-        m=movies[code]
-
-        kb=InlineKeyboardMarkup([
-        [InlineKeyboardButton("▶️ Keyingi film",callback_data="next_movie")],
-        [InlineKeyboardButton("🎬 Ulashish",url=f"https://t.me/{BOT_USERNAME}")]
-        ])
-
-        await context.bot.send_video(
-        q.message.chat_id,
-        m["file_id"],
-        caption=f"🎬 {m['name']}",
-        reply_markup=kb
         )
 
 async def message_handler(update:Update,context:ContextTypes.DEFAULT_TYPE):
@@ -219,95 +208,77 @@ async def message_handler(update:Update,context:ContextTypes.DEFAULT_TYPE):
     users=load_users()
     movies=load_movies()
 
-    uid=update.effective_user.id
-    text=update.message.text
-
-    user=get_user(users,uid)
-
     mode=context.user_data.get("mode")
 
-    if mode=="delete_movie":
+    if mode=="add_movie":
 
-        if text in movies:
+        msg=update.message
 
-            name=movies[text]["name"]
-
-            del movies[text]
-
-            save_movies(movies)
-
-            await update.message.reply_text(f"{name} o‘chirildi")
-
+        if msg.video:
+            file_id=msg.video.file_id
+        elif msg.document:
+            file_id=msg.document.file_id
         else:
-            await update.message.reply_text("Topilmadi")
+            await msg.reply_text("Video yuboring")
+            return
+
+        context.user_data["file"]=file_id
+        context.user_data["mode"]="movie_code"
+
+        await msg.reply_text("Film kodi kiriting")
+        return
+
+    if mode=="movie_code":
+
+        context.user_data["code"]=update.message.text
+        context.user_data["mode"]="movie_name"
+
+        await update.message.reply_text("Film nomini kiriting")
+        return
+
+    if mode=="movie_name":
+
+        code=context.user_data["code"]
+
+        movies[code]={
+        "name":update.message.text,
+        "file_id":context.user_data["file"],
+        "views":0
+        }
+
+        save_movies(movies)
+
+        await update.message.reply_text("Film qo‘shildi")
 
         context.user_data.clear()
         return
 
-    if mode=="broadcast":
+    if mode=="add_channel":
 
-        count=0
+        ch=update.message.text
 
-        for u in users:
+        settings=load_settings()
 
-            try:
-                await update.message.copy(chat_id=int(u))
-                count+=1
-            except:
-                pass
+        settings["channels"].append(ch)
 
-        await update.message.reply_text(f"{count} ta userga yuborildi")
+        save_settings(settings)
+
+        await update.message.reply_text("Kanal qo‘shildi")
 
         context.user_data.clear()
         return
 
-    if mode=="add_limit":
-
-        try:
-
-            uid_new,limit=text.split()
-
-            target=get_user(users,uid_new)
-
-            target["limit"]=int(limit)
-
-            save_users(users)
-
-            await update.message.reply_text("Limit o‘zgardi")
-
-        except:
-
-            await update.message.reply_text("Format: user_id limit")
-
-        context.user_data.clear()
-        return
+    text=update.message.text
 
     if text in movies:
 
         m=movies[text]
 
-        movies[text]["views"]=m.get("views",0)+1
-
-        user["used"]+=1
-
-        save_movies(movies)
-        save_users(users)
-
-        kb=InlineKeyboardMarkup([
-        [InlineKeyboardButton("▶️ Keyingi film",callback_data="next_movie")],
-        [InlineKeyboardButton("🎬 Ulashish",url=f"https://t.me/{BOT_USERNAME}")]
-        ])
-
         await context.bot.send_video(
         update.effective_chat.id,
         m["file_id"],
-        caption=f"🎬 {m['name']}",
-        reply_markup=kb
+        caption=m["name"]
         )
-
-        return
-
-    await update.message.reply_text("Kod topilmadi")
 
 def main():
 
@@ -317,7 +288,7 @@ def main():
 
     app.add_handler(CallbackQueryHandler(callback_handler))
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,message_handler))
+    app.add_handler(MessageHandler(filters.ALL,message_handler))
 
     print("Bot ishga tushdi")
 
