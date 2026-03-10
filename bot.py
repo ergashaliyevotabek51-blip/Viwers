@@ -306,17 +306,28 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return
 
-    # ===== KANAL QO'SHISH =====
-    if mode == "add_channel":
-        settings = load_settings()
-        channels = settings.get("channels", [])
+    # ===== KANAL QO'SHISH / OFF =====
+if mode == "add_channel":
+    settings = load_settings()
+    channels = settings.get("channels", [])
+
+    if text.lower() in ["off", "yo‘q", "o‘chir"]:
+        # Barcha majburiy kanallar o‘chiriladi
+        settings["channels"] = []
+        save_settings(settings)
+        await update.message.reply_text("✅ Majburiy obuna o‘chirildi")
+    else:
+        # Faqat yangi kanal qo‘shish
         if text not in channels:
             channels.append(text)
             settings["channels"] = channels
             save_settings(settings)
-            await update.message.reply_text(f"Kanal qo‘shildi: {text}")
-        context.user_data.clear()
-        return
+            await update.message.reply_text(f"✅ Kanal qo‘shildi: {text}")
+        else:
+            await update.message.reply_text(f"ℹ Kanal allaqachon ro‘yxatda: {text}")
+
+    context.user_data.clear()
+    return
 
     # ===== USER KOD BO'YICHA KINO =====
     if text in movies:
