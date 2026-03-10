@@ -1,42 +1,51 @@
 from database import load_json
 from config import SETTINGS_FILE
-from telegram import InlineKeyboardButton,InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 
 def get_channels():
 
-    settings=load_json(SETTINGS_FILE,{"channels":[]})
+    settings = load_json(SETTINGS_FILE, {"channels": []})
 
-    return settings.get("channels",[])
+    return settings.get("channels", [])
 
-async def check_user(context,user_id):
 
-    channels=get_channels()
+async def check_user(context, user_id):
 
-    result={}
+    channels = get_channels()
+
+    if not channels:
+        return {}
+
+    result = {}
 
     for ch in channels:
 
         try:
 
-            member=await context.bot.get_chat_member(ch,user_id)
+            member = await context.bot.get_chat_member(ch, user_id)
 
-            if member.status in ["member","administrator","creator"]:
-                result[ch]=True
+            if member.status in ["member", "administrator", "creator"]:
+                result[ch] = True
             else:
-                result[ch]=False
+                result[ch] = False
 
-        except:
-            result[ch]=False
+        except Exception:
+            result[ch] = False
 
     return result
 
+
 def keyboard(status):
 
-    kb=[]
+    if not status:
+        return None
 
-    for ch,val in status.items():
+    kb = []
 
-        icon="✅" if val else "❌"
+    for ch, val in status.items():
+
+        icon = "✅" if val else "❌"
 
         kb.append([
             InlineKeyboardButton(
@@ -46,7 +55,10 @@ def keyboard(status):
         ])
 
     kb.append([
-        InlineKeyboardButton("🔄 Tekshirish",callback_data="check_sub")
+        InlineKeyboardButton(
+            "🔄 Obunani tekshirish",
+            callback_data="check_sub"
+        )
     ])
 
     return InlineKeyboardMarkup(kb)
