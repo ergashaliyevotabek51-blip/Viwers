@@ -9,7 +9,7 @@ from telegram.ext import (
 )
 
 # ================= CONFIG =================
-TOKEN = os.getenv("BOT_TOKEN")  # Railway Variables da BOT_TOKEN sifatida bo'lishi kerak
+TOKEN = os.getenv("BOT_TOKEN")  # Railway yoki boshqa joyda BOT_TOKEN deb saqlang
 BOT_USERNAME = "UzbekFilmTV_bot"
 
 USERS_FILE    = "users.json"
@@ -19,9 +19,8 @@ SETTINGS_FILE = "settings.json"
 FREE_LIMIT = 5
 REF_LIMIT  = 5
 
-# ================= ADMIN & CHANNELS =================
-DEFAULT_ADMINS = [774440841]
-MANDATORY_CHANNELS = []  # Admin panel orqali sozlanadi
+DEFAULT_ADMINS = [774440841]  # o'zingizning ID'ingizni qoldiring
+MANDATORY_CHANNELS = []       # admin paneldan sozlanadi
 
 # ================= HELPERS =================
 def load_json(file, default):
@@ -108,7 +107,7 @@ async def send_subscription_message(message, context):
 # ================= ADMIN KEYBOARD =================
 def admin_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Kino qo‘shish", callback_data="add_movie"),
+        [InlineKeyboardButton("➕ Kino qo‘shish (forward)", callback_data="add_movie_forward"),
          InlineKeyboardButton("➖ Kino o‘chirish", callback_data="delete_movie")],
         [InlineKeyboardButton("📊 Statistika", callback_data="stats"),
          InlineKeyboardButton("🔥 Top filmlar", callback_data="top_movies")],
@@ -131,15 +130,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         f"Assalomu alaykum, {fname}! 👋\n\n"
-        f"🎬 <b>UzbekFilmTV</b> — eng sara o‘zbek filmlari shu yerdagi bot!\n\n"
-        f"🔥 Kod yuboring (masalan: 12, 45, 107) → kino darhol keladi\n"
-        f"• Bepul: 5 ta   • Do‘st uchun: +5 ta har bir yangi do‘st\n\n"
+        f"🎬 <b>UzbekFilmTV</b> — eng sara o‘zbek filmlari!\n\n"
+        f"Kod yuboring → film darhol keladi\n"
+        f"• Bepul: {FREE_LIMIT} ta   • Do‘st uchun: +{REF_LIMIT} ta\n\n"
         f"🚀 Kodni yozing yoki do‘stlaringizni taklif qiling!"
     )
     kb = [
         [InlineKeyboardButton("🎟 Mening limitim", callback_data="my_limit")],
         [InlineKeyboardButton("🎬 Random film", callback_data="rand_movie")],
-        [InlineKeyboardButton("🔥 Trend film", callback_data="trend_movie")]
+        [InlineKeyboardButton("🔥 Trend filmlar", callback_data="trend_movie")]
     ]
     if is_admin(uid):
         kb.append([InlineKeyboardButton("🛠 Admin panel", callback_data="admin")])
@@ -157,7 +156,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "my_limit":
         await q.message.reply_text(
-            f"🔢 Sizning limitingiz: {user['used']}/{max_limit(user)}\n"
+            f"🔢 Limitingiz: {user['used']}/{max_limit(user)}\n"
             f"Do‘stlar soni: {user['referrals']}"
         )
         return
@@ -166,20 +165,22 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         code = random_movie(movies)
         if code:
             m = movies[code]
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("▶️ Keyingi film", callback_data="next_movie")],
-                [InlineKeyboardButton("🔗 Ulashish", url=f"https://t.me/{BOT_USERNAME}")]
-            ])
-            await q.message.reply_text(f"🎬 {m['name']}\n📥 Yuklab olish: {m['file']}", reply_markup=kb)
+            if "file_id" in m:
+                if m["file_type"] == "video":
+                    await context.bot.send_video(q.message.chat_id, m["file_id"], caption=m["name"])
+                else:
+                    await context.bot.send_document(q.message.chat_id, m["file_id"], caption=m["name"])
+            else:
+                await q.message.reply_text(f"🎬 {m['name']}\n{m.get('file', 'Havola yo‘q')}")
         else:
-            await q.message.reply_text("❌ Hozircha kinolar yo‘q")
+            await q.message.reply_text("Hozircha filmlar yo‘q")
         return
 
     if data == "trend_movie":
         top = trending(movies)
         text = "🔥 Trend filmlar:\n\n"
         for i, (code, m) in enumerate(top, 1):
-            text += f"{i}. {m['name']} — {m.get('views', 0)} ta ko‘rilgan\n"
+            text += f"{i}. {m['name']} — {m.get('views', 0)} ta\n"
         await q.message.reply_text(text)
         return
 
@@ -189,56 +190,55 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "admin":
         await q.message.reply_text("🛠 Admin panel", reply_markup=admin_keyboard())
 
-    elif data == "add_movie":
-        context.user_data["mode"] = "add_movie_name"
-        await q.message.reply_text("Film nomini yuboring:")
+    elif data == "add_movie_forward":
+        context.user_data["mode"] = "wait_movie_forward"
+        await q.message.reply_text("Kinoni (video yoki document) botga forward qiling:")
 
     elif data == "delete_movie":
         context.user_data["mode"] = "delete_movie"
-        await q.message.reply_text("O‘chirish uchun kino kodini yuboring:")
+        await q.message.reply_text("O‘chirish uchun kodni yuboring:")
 
     elif data == "stats":
-        await q.message.reply_text(f"👥 Userlar: {len(users)}\n🎬 Kinolar: {len(movies)}")
+        await q.message.reply_text(f"👥 Foydalanuvchilar: {len(users)}\n🎬 Filmlar: {len(movies)}")
 
     elif data == "top_movies":
         top = trending(movies)
-        text = "🔥 Top 10 filmlar\n\n"
+        text = "🔥 Top 10 filmlar:\n\n"
         for i, (code, m) in enumerate(top, 1):
-            text += f"{i}. {m['name']} — {m.get('views', 0)} ta ko‘rilgan\n"
+            text += f"{i}. {m['name']} — {m.get('views', 0)}\n"
         await q.message.reply_text(text)
 
     elif data == "broadcast":
         context.user_data["mode"] = "wait_broadcast"
-        await q.message.reply_text("📢 Omaviy xabar rejimi. Xabar yuboring.\n/cancel — bekor qilish")
+        await q.message.reply_text("Xabarni yuboring (/cancel — bekor qilish)")
 
     elif data == "subscription":
         context.user_data["mode"] = "set_subscription"
-        current = ", ".join(MANDATORY_CHANNELS) if MANDATORY_CHANNELS else "yo‘q"
-        await q.message.reply_text(
-            f"Hozirgi majburiy kanallar: {current}\n\n"
-            "Yangi kanal username yuboring (@username formatida)\n"
-            "O‘chirish uchun: off yoki yo‘q"
-        )
+        current = ", ".join(MANDATORY_CHANNELS) or "yo‘q"
+        await q.message.reply_text(f"Majburiy kanallar: {current}\n\nYangi kanal yoki off/yo‘q")
 
     elif data == "add_limit":
         context.user_data["mode"] = "add_limit"
-        await q.message.reply_text("Limit qo‘shish uchun:\nuser_id yangi_limit\nMasalan: 123456789 15")
+        await q.message.reply_text("user_id yangi_limit\nMasalan: 123456789 20")
 
     elif data == "next_movie":
         code = random_movie(movies)
         if code:
             m = movies[code]
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("▶️ Keyingi film", callback_data="next_movie")],
-                [InlineKeyboardButton("🔗 Ulashish", url=f"https://t.me/{BOT_USERNAME}")]
-            ])
-            await q.message.reply_text(f"🎬 {m['name']}\n📥 Yuklab olish: {m['file']}", reply_markup=kb)
+            if "file_id" in m:
+                if m["file_type"] == "video":
+                    await context.bot.send_video(q.message.chat_id, m["file_id"], caption=m["name"])
+                else:
+                    await context.bot.send_document(q.message.chat_id, m["file_id"], caption=m["name"])
+            else:
+                await q.message.reply_text(f"🎬 {m['name']}\n{m.get('file', 'Havola yo‘q')}")
+        return
 
     elif data == "check_sub":
         if await check_user_subscribed(context, uid):
-            await q.edit_message_text("✅ Obuna tasdiqlandi! Botdan foydalanishingiz mumkin.")
+            await q.edit_message_text("✅ Obuna tasdiqlandi!")
         else:
-            await q.edit_message_text("❌ Hali barcha kanallarga obuna bo‘lmagansiz.")
+            await q.edit_message_text("❌ Hali obuna bo‘lmagansiz")
 
 # ================= MESSAGE HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -257,53 +257,65 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Bekor qilindi")
         return
 
-    # ADMIN MODES
     if is_admin(update.effective_user.id):
 
         if mode == "add_limit":
             try:
-                target_id, new_limit = text.split()
-                target_id = target_id.strip()
-                new_limit = int(new_limit)
+                parts = text.split()
+                target_id = parts[0]
+                new_limit = int(parts[1])
                 target = get_user(users, target_id)
-                old_limit = target.get("limit", FREE_LIMIT)
+                old = target.get("limit", FREE_LIMIT)
                 target["limit"] = new_limit
                 save_users(users)
-                await update.message.reply_text(
-                    f"✅ {target_id} uchun limit o‘zgartirildi:\n"
-                    f"{old_limit} → {new_limit}"
-                )
+                await update.message.reply_text(f"✅ {target_id}: {old} → {new_limit}")
             except:
-                await update.message.reply_text("❌ Format: user_id yangi_limit\nMasalan: 123456 20")
+                await update.message.reply_text("Format: user_id limit")
             context.user_data.pop("mode", None)
             return
 
-        if mode == "add_movie_name":
-            context.user_data["movie_name"] = text
-            context.user_data["mode"] = "add_movie_link"
-            await update.message.reply_text("Film yuklab olish havolasini yuboring\n(masalan: https://t.me/c/123456789/456 yoki t.me/... )")
-            return
-
-        if mode == "add_movie_link":
-            name = context.user_data.get("movie_name", "Noma'lum film")
-            link = text.strip()
-
-            if not (link.startswith("http") or link.startswith("t.me")):
-                await update.message.reply_text("❌ Havola noto‘g‘ri ko‘rinadi. To‘g‘ri link yuboring.")
+        if mode == "wait_movie_forward":
+            if update.message.video:
+                file_id = update.message.video.file_id
+                file_type = "video"
+            elif update.message.document:
+                file_id = update.message.document.file_id
+                file_type = "document"
+            else:
+                await update.message.reply_text("Iltimos, video yoki document forward qiling")
                 return
 
-            code = str(len(movies) + 1)
+            context.user_data["movie_file_id"] = file_id
+            context.user_data["movie_file_type"] = file_type
+            context.user_data["mode"] = "add_movie_name_forward"
+            await update.message.reply_text("Film nomini yuboring:")
+            return
+
+        if mode == "add_movie_name_forward":
+            context.user_data["movie_name"] = text
+            context.user_data["mode"] = "add_movie_code_forward"
+            await update.message.reply_text("Kod tanlang (masalan: film01, nussa777, super):")
+            return
+
+        if mode == "add_movie_code_forward":
+            code = text.strip()
+            if code in movies:
+                await update.message.reply_text("❌ Bu kod allaqachon band!")
+                return
+
+            file_id = context.user_data.get("movie_file_id")
+            file_type = context.user_data.get("movie_file_type")
+            name = context.user_data.get("movie_name", "Noma'lum film")
+
             movies[code] = {
                 "name": name,
-                "file": link,
+                "file_id": file_id,
+                "file_type": file_type,
                 "views": 0
             }
             save_movies(movies)
             await update.message.reply_text(
-                f"✅ Kino muvaffaqiyatli qo‘shildi!\n\n"
-                f"Kod: <b>{code}</b>\n"
-                f"Nomi: {name}\n"
-                f"Havola: {link}"
+                f"✅ Film qo‘shildi!\nKod: {code}\nNomi: {name}\nTuri: {file_type}"
             )
             context.user_data.clear()
             return
@@ -313,42 +325,40 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 name = movies[text]["name"]
                 del movies[text]
                 save_movies(movies)
-                await update.message.reply_text(f"🗑 {name} (kod: {text}) o‘chirildi")
+                await update.message.reply_text(f"🗑 {name} ({text}) o‘chirildi")
             else:
-                await update.message.reply_text("❌ Bunday kod topilmadi")
+                await update.message.reply_text("Kod topilmadi")
             context.user_data.clear()
             return
 
         if mode == "wait_broadcast":
             count = 0
-            for u in list(users.keys()):
+            for u in users:
                 try:
                     await update.message.copy(chat_id=int(u))
                     count += 1
                 except:
                     pass
-            await update.message.reply_text(f"📤 Xabar {count} ta foydalanuvchiga yuborildi")
+            await update.message.reply_text(f"Xabar {count} kishiga yetkazildi")
             context.user_data.clear()
             return
 
         if mode == "set_subscription":
             global MANDATORY_CHANNELS
-            if text.lower() in ["off", "yo‘q", "o‘chir", "delete"]:
+            if text.lower() in ["off", "yo‘q", "o‘chir"]:
                 MANDATORY_CHANNELS = []
-                await update.message.reply_text("✅ Majburiy obuna o‘chirildi")
+                await update.message.reply_text("Majburiy obuna o‘chirildi")
             else:
                 ch = text.strip()
                 if not ch.startswith("@"):
                     ch = "@" + ch
                 if ch not in MANDATORY_CHANNELS:
                     MANDATORY_CHANNELS.append(ch)
-                    await update.message.reply_text(f"✅ Kanal qo‘shildi: {ch}")
-                else:
-                    await update.message.reply_text(f"Bu kanal allaqachon ro‘yxatda")
+                    await update.message.reply_text(f"Kanal qo‘shildi: {ch}")
             context.user_data.pop("mode", None)
             return
 
-    # ODDIY KINO KODI BILAN ISHLASH
+    # USER KOD YOZSA
     if text in movies:
         if not await check_user_subscribed(context, update.effective_user.id):
             await send_subscription_message(update.message, context)
@@ -365,15 +375,32 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔗 Ulashish", url=f"https://t.me/{BOT_USERNAME}")]
         ])
 
-        await update.message.reply_text(
-            f"🎬 <b>{m['name']}</b>\n\n"
-            f"📥 Yuklab olish: {m['file']}",
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
+        if "file_id" in m and m["file_id"]:
+            if m["file_type"] == "video":
+                await context.bot.send_video(
+                    update.effective_chat.id,
+                    m["file_id"],
+                    caption=f"🎬 <b>{m['name']}</b>",
+                    reply_markup=kb,
+                    parse_mode="HTML"
+                )
+            else:
+                await context.bot.send_document(
+                    update.effective_chat.id,
+                    m["file_id"],
+                    caption=f"🎬 <b>{m['name']}</b>",
+                    reply_markup=kb,
+                    parse_mode="HTML"
+                )
+        else:
+            await update.message.reply_text(
+                f"🎬 <b>{m['name']}</b>\n\nHavola: {m.get('file', 'yo‘q')}",
+                reply_markup=kb,
+                parse_mode="HTML"
+            )
         return
 
-    await update.message.reply_text("❌ Bunday kod topilmadi yoki xato yozilgan")
+    await update.message.reply_text("Bunday kod topilmadi")
 
 # ================= MAIN =================
 def main():
@@ -381,6 +408,9 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    # Forward qilingan media uchun handler
+    app.add_handler(MessageHandler(filters.VIDEO | filters.Document.ALL, message_handler))
+
     print("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
