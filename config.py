@@ -1,8 +1,8 @@
 import os
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = "8370792264:AAFC0Zym1W3t_2yI1AipjI-lhmjouwclFNI"
 
-BOT_USERNAME = "UzbekFilmTv_bot"
+BOT_USERNAME = "UzbekFilmTV_bot"
 
 FREE_LIMIT = 5
 REF_LIMIT = 5
