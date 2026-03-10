@@ -280,27 +280,40 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return
 
-    # ================= ADD MOVIE =================
-    if mode=="add_movie" and is_admin(int(uid)):
-        if update.message.forward_from_chat:
-            context.user_data["movie_msg"] = update.message.forward_from_message_id
-            context.user_data["movie_chat"] = update.message.forward_from_chat.id
-            context.user_data["mode"] = "movie_name"
-            await update.message.reply_text("Endi film nomini yuboring")
-            return
+    # ================= ADD MOVIE (Qo'lda kiritish) =================
+if mode=="add_movie" and is_admin(int(uid)):
+    # Adminga so‘raladi
+    context.user_data["mode"] = "movie_name"
+    await update.message.reply_text(
+        "🎬 Kino qo‘shish rejimi.\nIltimos, film nomini yuboring:"
+    )
+    return
 
-    if mode=="movie_name" and is_admin(int(uid)):
-        name=text
-        code=str(len(movies)+1)
-        chat=str(context.user_data["movie_chat"]).replace("-100","")
-        msg=context.user_data["movie_msg"]
-        link=f"https://t.me/c/{chat}/{msg}"
-        movies[code]={"name":name,"file":link,"views":0}
-        save_movies(movies)
-        await update.message.reply_text(f"✅ Kino qo‘shildi\nKod: {code}")
-        context.user_data.clear()
+if mode=="movie_name" and is_admin(int(uid)):
+    name = text.strip()
+    if not name:
+        await update.message.reply_text("❌ Film nomi bo‘sh bo‘la olmaydi. Qayta yuboring:")
         return
+    code = str(len(movies)+1)
+    
+    # Botdan foydalanuvchi film linkini so‘raymiz
+    context.user_data["movie_name"] = name
+    context.user_data["mode"] = "movie_file"
+    await update.message.reply_text("📥 Endi film fayli linkini yuboring:")
+    return
 
+if mode=="movie_file" and is_admin(int(uid)):
+    file_link = text.strip()
+    if not file_link:
+        await update.message.reply_text("❌ Fayl linki bo‘sh bo‘la olmaydi. Qayta yuboring:")
+        return
+    name = context.user_data.get("movie_name")
+    code = str(len(movies)+1)
+    movies[code] = {"name":name,"file":file_link,"views":0}
+    save_movies(movies)
+    await update.message.reply_text(f"✅ Kino qo‘shildi!\nKod: {code}")
+    context.user_data.clear()
+    return
     # ================= DELETE MOVIE =================
     if mode=="delete_movie" and is_admin(int(uid)):
         if text in movies:
