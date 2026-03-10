@@ -15,7 +15,7 @@ SETTINGS_FILE = "settings.json"
 FREE_LIMIT = 5
 REF_LIMIT = 5
 
-ADMINS = [774440841, 7818576058]  # o'zingizning IDingizni qo'ying
+ADMINS = [774440841, 7818576058]  # O'zingizning IDingizni qo'ying
 
 # ===== HELPERS =====
 def load_json(file, default):
@@ -72,9 +72,12 @@ def random_movie(movies):
         return None
     return random.choice(list(movies.keys()))
 
-async def check_subscription(context, user_id):
+# ===== SUBSCRIPTION CHECK =====
+async def check_subscription(context: ContextTypes.DEFAULT_TYPE, user_id):
     settings = load_settings()
     channels = settings.get("channels", [])
+    if not channels:
+        return True  # kanal qo'shilmagan bo'lsa tekshirish shart emas
     for ch in channels:
         try:
             member = await context.bot.get_chat_member(ch, user_id)
@@ -84,6 +87,21 @@ async def check_subscription(context, user_id):
             return False
     return True
 
+def subscription_keyboard():
+    settings = load_settings()
+    kb = []
+    for ch in settings.get("channels", []):
+        kb.append([InlineKeyboardButton(f"🔔 Obuna bo‘ling: {ch}", url=f"https://t.me/{ch.lstrip('@')}")])
+    kb.append([InlineKeyboardButton("🔄 Tekshirish", callback_data="check_sub")])
+    return InlineKeyboardMarkup(kb)
+
+async def send_subscription_message(update_or_message, context):
+    kb = subscription_keyboard()
+    await update_or_message.reply_text(
+        "Botdan foydalanish uchun quyidagi kanallarga obuna bo‘ling:",
+        reply_markup=kb
+    )
+
 # ===== START =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -91,6 +109,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     get_user(users, uid)
     save_users(users)
+
+    if not await check_subscription(context, uid):
+        await send_subscription_message(update.message, context)
+        return
 
     text = (
         f"Assalomu alaykum, 𝐎𝐭𝐚𝐛𝐞𝐤! 👋\n\n"
@@ -117,27 +139,49 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     data = q.data
     uid = q.from_user.id
-
     users = load_users()
     movies = load_movies()
     user = get_user(users, uid)
 
+    # ===== OBUNA TEKSHIRISH =====
+    if data == "check_sub":
+        if await check_subscription(context, uid):
+            await q.edit_message_text("✅ Obuna tasdiqlandi!")
+        else:
+            await send_subscription_message(q.message, context)
+        return
+
+    # ===== USER FUNKSIONAL =====
     if data == "limit":
         await q.message.reply_text(f"🎟 Limit: {user['used']}/{max_limit(user)}")
+        return
     elif data == "random":
+        if not await check_subscription(context, uid):
+            await send_subscription_message(q.message, context)
+            return
         code = random_movie(movies)
         if not code:
             await q.message.reply_text("Film yo‘q")
             return
         m = movies[code]
         await context.bot.send_video(q.message.chat_id, m["file_id"], caption=m.get("caption", m["name"]))
+        return
     elif data == "trend":
+        if not await check_subscription(context, uid):
+            await send_subscription_message(q.message, context)
+            return
         top = trending(movies)
         text = "🔥 Trend filmlar\n\n"
         for i, (code, m) in enumerate(top, 1):
             text += f"{i}. {m['name']} — {m.get('views',0)} ta\n"
         await q.message.reply_text(text)
-    elif data == "admin" and is_admin(uid):
+        return
+
+    # ===== ADMIN PANEL =====
+    if not is_admin(uid):
+        return
+
+    if data == "admin":
         kb = [
             [InlineKeyboardButton("➕ Kino qo‘shish", callback_data="add")],
             [InlineKeyboardButton("➖ Kino o‘chirish", callback_data="delete")],
@@ -148,29 +192,32 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("💠 Limit qo‘shish", callback_data="limit_add")]
         ]
         await q.message.reply_text("Admin panel", reply_markup=InlineKeyboardMarkup(kb))
-    elif data == "stats" and is_admin(uid):
+        return
+
+    # ADMIN FUNKSIYALARI
+    if data == "stats":
         await q.message.reply_text(f"👥 Users: {len(users)}\n🎬 Movies: {len(movies)}")
-    elif data == "top" and is_admin(uid):
+    elif data == "top":
         top = trending(movies)
         text = "🔥 Top filmlar\n\n"
         for i, (code, m) in enumerate(top, 1):
             text += f"{i}. {m['name']} — {m.get('views',0)} ta\n"
         await q.message.reply_text(text)
-    elif data == "add" and is_admin(uid):
+    elif data == "add":
         context.user_data["mode"] = "add_movie"
         await q.message.reply_text("Filmni forward qiling (video, document, audio, voice, animation)")
-    elif data == "delete" and is_admin(uid):
+    elif data == "delete":
         context.user_data["mode"] = "delete_movie"
         await q.message.reply_text("Kod yuboring")
-    elif data == "broadcast" and is_admin(uid):
+    elif data == "broadcast":
         context.user_data["mode"] = "broadcast"
         await q.message.reply_text("Xabar yuboring")
-    elif data == "limit_add" and is_admin(uid):
+    elif data == "limit_add":
         context.user_data["mode"] = "limit_add"
         await q.message.reply_text("user_id limit")
-    elif data == "sub" and is_admin(uid):
+    elif data == "sub":
         context.user_data["mode"] = "add_channel"
-        await q.message.reply_text("Kanal username yuboring")
+        await q.message.reply_text("Kanal username kiriting (bir nechta qo‘shish mumkin)")
 
 # ===== MESSAGE HANDLER =====
 async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -179,7 +226,9 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     movies = load_movies()
 
-    # === KINO QO'SHISH ===
+    uid = str(update.effective_user.id)
+
+    # ===== KINO QO'SHISH =====
     if mode == "add_movie":
         msg = update.message
         if msg.video:
@@ -221,7 +270,7 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return
 
-    # === KINO O'CHIRISH ===
+    # ===== KINO O'CHIRISH =====
     if mode == "delete_movie":
         if text in movies:
             del movies[text]
@@ -232,7 +281,7 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return
 
-    # === BROADCAST ===
+    # ===== BROADCAST =====
     if mode == "broadcast":
         count = 0
         for u in users:
@@ -245,7 +294,7 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return
 
-    # === LIMIT QO'SHISH ===
+    # ===== LIMIT QO'SHISH =====
     if mode == "limit_add":
         try:
             uid2, limit = text.split()
@@ -257,18 +306,24 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return
 
-    # === KANAL QO'SHISH ===
+    # ===== KANAL QO'SHISH =====
     if mode == "add_channel":
         settings = load_settings()
-        if text not in settings.get("channels", []):
-            settings.setdefault("channels", []).append(text)
+        channels = settings.get("channels", [])
+        if text not in channels:
+            channels.append(text)
+            settings["channels"] = channels
             save_settings(settings)
-        await update.message.reply_text("Kanal qo‘shildi")
+            await update.message.reply_text(f"Kanal qo‘shildi: {text}")
         context.user_data.clear()
         return
 
-    # === USER KOD BO'YICHA KINO ===
+    # ===== USER KOD BO'YICHA KINO =====
     if text in movies:
+        if not await check_subscription(context, update.effective_user.id):
+            await send_subscription_message(update.message, context)
+            return
+
         m = movies[text]
         movies[text]["views"] = m.get("views", 0) + 1
         user = get_user(users, update.effective_user.id)
@@ -280,7 +335,6 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             m["file_id"],
             caption=m.get("caption", m["name"])
         )
-        return
 
 # ===== MAIN =====
 def main():
