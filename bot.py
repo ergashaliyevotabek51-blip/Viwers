@@ -329,7 +329,7 @@ if mode == "add_channel":
     context.user_data.clear()
     return
 
-   # ===== USER KOD BO'YICHA KINO =====
+   # USER KOD BO'YICHA KINO
 if text in movies:
     if not await check_subscription(context, update.effective_user.id):
         await send_subscription_message(update.message, context)
@@ -341,14 +341,21 @@ if text in movies:
     user["used"] += 1
     save_movies(movies)
     save_users(users)
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("▶️ Keyingi film", callback_data="next_movie")],
+        [InlineKeyboardButton("🔗 Ulashish", url=f"https://t.me/{BOT_USERNAME}")]
+    ])
+
     await context.bot.send_video(
         update.effective_chat.id,
         m["file_id"],
-        caption=m.get("caption", m["name"])
+        caption=m.get("caption", m["name"]),
+        reply_markup=kb
     )
 else:
-    # Agar kod topilmasa
-    await update.message.reply_sticker("CAACAgIAAxkBAAEHkRhjRrV6A9XtIz6sYk2uKX1eR1VJZgAC4QADVp29CngdY0V0vFj6HgQ")  # kulgili/ilmiy sticker
+    # Kod topilmasa - javob + stiker
+    await update.message.reply_sticker("CAACAgIAAxkBAAEHkRhjRrV6A9XtIz6sYk2uKX1eR1VJZgAC4QADVp29CngdY0V0vFj6HgQ")
     await update.message.reply_text(
         "❌ Bunday kod topilmadi!\n\n"
         "🎬 Sizga tavsiya: /start tugmasini bosib, trend yoki random filmlarga qarang!"
