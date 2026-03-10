@@ -15,7 +15,7 @@ SETTINGS_FILE = "settings.json"
 FREE_LIMIT = 5
 REF_LIMIT = 5
 
-ADMINS = [774440841]  # o'zingizning IDingizni qo'ying
+ADMINS = [774440841, 7818576058]  # o'zingizning IDingizni qo'ying
 
 # ===== HELPERS =====
 def load_json(file, default):
