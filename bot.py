@@ -4,25 +4,23 @@ import random
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
-    ConversationHandler,
     filters
 )
 
 # ==================== KONFIGURATSIYA ====================
-BOT_USERNAME = "UzbekFilmTV_bot"  # <-- BOT USERNAME
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # <-- BOT TOKEN
+BOT_USERNAME = "UzbekFilmTV_bot"
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 
-# ADMIN ID lar ro'yxati (bir nechta admin qo'shish mumkin)
+# ADMIN ID lar ro'yxati
 ADMIN_IDS = [
-    "774440841",      # <-- Asosiy admin ID (o'zingizning ID)
-    "7818576058",      # <-- Qo'shimcha admin (ixtiyoriy)
+    "774440841, 7818576058",
 ]
 
 # Logging sozlamalari
@@ -41,18 +39,6 @@ MOVIES_FILE = os.path.join(DATA_DIR, "movies.json")
 CHANNELS_FILE = os.path.join(DATA_DIR, "channels.json")
 ADMINS_FILE = os.path.join(DATA_DIR, "admins.json")
 REQUESTS_FILE = os.path.join(DATA_DIR, "requests.json")
-
-# Conversation states
-ADDING_MOVIE_CODE = 1
-ADDING_MOVIE_NAME = 2
-ADDING_MOVIE_GENRE = 3
-EDITING_MOVIE = 4
-BROADCASTING = 5
-ADDING_LIMIT = 6
-BANNING_USER = 7
-ADDING_CHANNEL = 8
-REMOVING_CHANNEL = 9
-SEARCHING_MOVIE = 10
 
 # ==================== JSON YORDAMCHI FUNKSIYALAR ====================
 def load_json(filename: str) -> dict:
@@ -84,18 +70,14 @@ def save_channels(channels: dict):
     save_json(CHANNELS_FILE, channels)
 
 def get_admins() -> dict:
-    """Adminlarni yuklash - kod ichidagi ADMIN_IDS va JSON fayldan"""
     file_admins = load_json(ADMINS_FILE)
-    
-    # Kod ichidagi adminlarni ham qo'shish
     for admin_id in ADMIN_IDS:
         if admin_id not in file_admins:
             file_admins[admin_id] = {
-                "role": "super_admin" if admin_id == ADMIN_IDS[0] else "admin",
+                "role": "super_admin",
                 "added_at": datetime.now().isoformat(),
                 "source": "config"
             }
-    
     return file_admins
 
 def save_admins(admins: dict):
@@ -134,17 +116,12 @@ def get_or_create_user(user_id: str, username: str = None, first_name: str = Non
     return users[user_id]
 
 def is_admin(user_id: str) -> bool:
-    """Foydalanuvchi admin ekanligini tekshirish"""
-    # Avval kod ichidagi ro'yxatdan tekshirish
     if user_id in ADMIN_IDS:
         return True
-    
-    # Keyin JSON fayldan tekshirish
     admins = get_admins()
     return user_id in admins
 
 def is_super_admin(user_id: str) -> bool:
-    """Faqat asosiy admin ekanligini tekshirish"""
     return user_id == ADMIN_IDS[0]
 
 def is_banned(user_id: str) -> bool:
@@ -221,22 +198,6 @@ def search_movies(query: str) -> List[tuple]:
             results.append((code, data))
     return results
 
-def get_similar_movies(movie_code: str, limit: int = 5) -> List[tuple]:
-    movies = get_movies()
-    current_genre = movies.get(movie_code, {}).get("genre", "")
-    similar = []
-    
-    for code, data in movies.items():
-        if code != movie_code and data.get("genre") == current_genre:
-            similar.append((code, data))
-    
-    if len(similar) < limit:
-        others = [(c, d) for c, d in movies.items() if c != movie_code and c not in [x[0] for x in similar]]
-        if others:
-            similar.extend(random.sample(others, min(limit - len(similar), len(others))))
-    
-    return similar[:limit]
-
 # ==================== KLAVIATURALAR ====================
 def get_main_keyboard(user_id: str) -> InlineKeyboardMarkup:
     buttons = [
@@ -272,7 +233,6 @@ def get_movie_keyboard(movie_code: str, user_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 def get_admin_keyboard(user_id: str = None) -> InlineKeyboardMarkup:
-    """Admin panel klaviaturasi - super admin uchun qo'shimcha tugmalar"""
     buttons = [
         [InlineKeyboardButton("➕ Kino qo'shish", callback_data="add_movie"),
          InlineKeyboardButton("➖ Kino o'chirish", callback_data="delete_movie")],
@@ -292,7 +252,6 @@ def get_admin_keyboard(user_id: str = None) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🔙 Asosiy menyu", callback_data="main_menu")]
     ]
     
-    # Faqat super admin uchun admin boshqaruvi
     if user_id and is_super_admin(user_id):
         buttons.insert(-1, [InlineKeyboardButton("👮 Admin qo'shish", callback_data="add_admin"),
                            InlineKeyboardButton("❌ Admin o'chirish", callback_data="remove_admin")])
@@ -372,28 +331,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = str(user.id)
     
-    # Referal tekshiruvi
     if context.args and context.args[0].startswith("ref"):
         referrer_id = context.args[0].replace("ref", "")
         users = get_users()
         if referrer_id in users and referrer_id != user_id and user_id not in users:
             add_referral(referrer_id)
     
-    # Foydalanuvchi yaratish
     get_or_create_user(user_id, user.username, user.first_name)
     
-    # Ban tekshiruvi
     if is_banned(user_id):
         await update.message.reply_text("❌ Siz botdan bloklangansiz.")
         return
     
-    # Majburiy obuna tekshiruvi
     if not await check_subscription(user.id, context):
-        text = f"Asalomu alekum xush kelibsiz!\n\nBotdan foydalanish uchun quyidagi kanallarga obuna bo'ling:"
+        text = f"👋 Xush kelibsiz!\n\nBotdan foydalanish uchun quyidagi kanallarga obuna bo'ling:"
         await update.message.reply_text(text, reply_markup=get_subscription_keyboard())
         return
     
-    # Admin uchun xush kelibsiz xabari
     if is_admin(user_id):
         welcome_text = (
             f"🎬 Assalomu alaykum, {user.first_name}!\n\n"
@@ -406,7 +360,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_text = (
             f"🎬 Assalomu alaykum, {user.first_name}!\n\n"
             f"🎥 @{BOT_USERNAME} ga xush kelibsiz!\n\n"
-            f"🎬 UzbekFilmTV — eng sara o‘zbek filmlari va seriallari!\n"
             f"🎟 Sizning limit: 5 ta kino\n"
             f"📝 Kino kodini yuboring yoki menyudan tanlang"
         )
@@ -425,7 +378,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Avval kanallarga obuna bo'ling!", reply_markup=get_subscription_keyboard())
         return
     
-    # Admin jarayonlari
     if context.user_data.get("adding_movie"):
         await process_add_movie(update, context)
         return
@@ -446,18 +398,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await process_broadcast(update, context)
         return
     
-    # Admin qo'shish jarayoni
     if context.user_data.get("adding_admin"):
         await process_add_admin(update, context)
         return
     
-    # Kino kodi tekshiruvi
     movies = get_movies()
     if text in movies:
         await send_movie(update, context, text)
         return
     
-    # Qidiruv
     results = search_movies(text)
     if results:
         if len(results) == 1:
@@ -472,7 +421,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([InlineKeyboardButton("🔙 Asosiy menyu", callback_data="main_menu")])
             await update.message.reply_text(text_msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
     else:
-        # O'xshash kinolarni tavsiya qilish
         similar = random.sample(list(movies.items()), min(5, len(movies))) if movies else []
         text_msg = "❌ Kino topilmadi. Balki quyidagilardan birini izlagandirsiz:\n\n"
         keyboard = []
@@ -486,7 +434,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def send_movie(update: Update, context: ContextTypes.DEFAULT_TYPE, movie_code: str, query=None):
     user_id = str(update.effective_user.id)
     
-    # Adminlar uchun limit tekshirilmaydi
     if not is_admin(user_id) and not check_limit(user_id):
         ref_link = f"https://t.me/{BOT_USERNAME}?start=ref{user_id}"
         text = (
@@ -512,7 +459,6 @@ async def send_movie(update: Update, context: ContextTypes.DEFAULT_TYPE, movie_c
             message_id=movie["message_id"]
         )
         
-        # Adminlar uchun limit kamaymaydi
         if not is_admin(user_id):
             decrease_limit(user_id)
         
@@ -612,7 +558,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data.startswith("share_"):
             await share_movie(query, data.replace("share_", ""))
         
-        # Admin funksiyalari
         elif data == "admin_panel":
             await show_admin_panel(query, user_id)
         
@@ -667,7 +612,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "movie_requests":
             await show_movie_requests(query)
         
-        # Super admin funksiyalari
         elif data == "add_admin":
             await start_add_admin(query, context)
         
@@ -702,11 +646,10 @@ async def show_limit(query, user_id: str):
     users = get_users()
     user = users.get(user_id, {})
     
-    # Adminlar uchun cheksiz
     if is_admin(user_id):
         text = (
-            f"🎟 Sizning limitingiz: ♾️ Cheksiz (Admin)\n\n"
-            f"👮 Siz admin sifatidasiz, limit cheklanmagan!"
+            "🎟 Sizning limitingiz: ♾️ Cheksiz (Admin)\n\n"
+            "👮 Siz admin sifatidasiz, limit cheklanmagan!"
         )
     else:
         limit = user.get("limit", 0)
@@ -728,7 +671,6 @@ async def send_random_movie(query, context, user_id: str):
     await send_movie_by_query(query, context, movie[0], user_id)
 
 async def send_movie_by_query(query, context, movie_code: str, user_id: str):
-    # Adminlar uchun limit tekshirilmaydi
     if not is_admin(user_id) and not check_limit(user_id):
         ref_link = f"https://t.me/{BOT_USERNAME}?start=ref{user_id}"
         text = (
@@ -752,7 +694,6 @@ async def send_movie_by_query(query, context, movie_code: str, user_id: str):
             message_id=movie["message_id"]
         )
         
-        # Adminlar uchun limit kamaymaydi
         if not is_admin(user_id):
             decrease_limit(user_id)
         
@@ -931,7 +872,6 @@ async def show_admin_panel(query, user_id: str):
     total_users = len(get_users())
     total_movies = len(get_movies())
     
-    # Super admin uchun alohida belgi
     if is_super_admin(user_id):
         role = "👑 Super Admin"
     else:
@@ -1016,11 +956,13 @@ async def process_add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         del context.user_data["adding_movie"]
         
+        genre_text = genre if genre else "Noma'lum"
+        
         await update.message.reply_text(
             f"✅ Kino muvaffaqiyatli qo'shildi!\n\n"
             f"🎬 Kod: {user_data['code']}\n"
             f"📝 Nomi: {user_data['name']}\n"
-            f"🎭 Janr: {genre or 'Noma\'lum'}",
+            f"🎭 Janr: {genre_text}",
             reply_markup=get_admin_keyboard(str(update.effective_user.id))
         )
 
@@ -1235,7 +1177,6 @@ async def process_ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Foydalanuvchi topilmadi!")
         return
     
-    # Adminni ban qilish mumkin emas
     if is_admin(user_id):
         await update.message.reply_text("❌ Adminni ban qilish mumkin emas!")
         del context.user_data["banning_user"]
@@ -1317,7 +1258,6 @@ async def show_movie_requests(query):
 
 # ==================== SUPER ADMIN FUNKSIYALARI ====================
 async def start_add_admin(query, context):
-    """Yangi admin qo'shish (faqat super admin)"""
     if not is_super_admin(str(query.from_user.id)):
         await query.answer("❌ Faqat super admin qo'sha oladi!", show_alert=True)
         return
@@ -1335,7 +1275,6 @@ async def process_add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     new_admin_id = update.message.text.strip()
     
-    # O'zini admin qilish mumkin emas
     if new_admin_id == str(update.effective_user.id):
         await update.message.reply_text("❌ O'zingizni qo'sha olmaysiz!")
         del context.user_data["adding_admin"]
@@ -1360,14 +1299,12 @@ async def process_add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ {new_admin_id} admin qilindi!")
 
 async def start_remove_admin(query):
-    """Adminni o'chirish (faqat super admin)"""
     if not is_super_admin(str(query.from_user.id)):
         await query.answer("❌ Faqat super admin o'chira oladi!", show_alert=True)
         return
     
     admins = get_admins()
     
-    # Faqat qo'shilgan adminlarni ko'rsatish (config dan emas)
     removable_admins = [(aid, a) for aid, a in admins.items() 
                        if a.get("source") == "manual" and aid != str(query.from_user.id)]
     
@@ -1384,7 +1321,6 @@ async def start_remove_admin(query):
     await query.edit_message_text("O'chirish uchun adminni tanlang:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def remove_admin(query, admin_id: str):
-    """Adminni o'chirish"""
     if not is_super_admin(str(query.from_user.id)):
         return
     
@@ -1392,7 +1328,7 @@ async def remove_admin(query, admin_id: str):
     if admin_id in admins and admins[admin_id].get("source") == "manual":
         del admins[admin_id]
         save_admins(admins)
-        await query.answer(f"✅ Admin o'chirildi!", show_alert=True)
+        await query.answer("✅ Admin o'chirildi!", show_alert=True)
     
     await start_remove_admin(query)
 
@@ -1411,7 +1347,6 @@ def main():
     
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Handlerlar
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
