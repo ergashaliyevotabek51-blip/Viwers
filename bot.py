@@ -329,7 +329,7 @@ if mode == "add_channel":
     context.user_data.clear()
     return
 
-   # USER KOD BO'YICHA KINO
+ # USER KOD BO'YICHA KINO
 if text in movies:
     if not await check_subscription(context, update.effective_user.id):
         await send_subscription_message(update.message, context)
