@@ -22,7 +22,7 @@ SETTINGS_FILE = "settings.json"
 FREE_LIMIT = 5
 REF_LIMIT  = 5
 
-ADMINS = [774440841, 7818576058]           # ← o'zingizning real ID
+ADMINS = [774440841, 7818576058]           # ← o'zingizning real ID ni qo'ying!
 
 # ==================== YORDAMCHI FUNKSİYALAR ====================
 def load_json(file, default):
@@ -76,16 +76,13 @@ async def check_subscription(context: ContextTypes.DEFAULT_TYPE, user_id: int) -
 
     for channel in channels:
         try:
-            # kanal nomini to'g'ri formatda olish
             chat_id = channel if channel.startswith("@") else f"@{channel.lstrip('@')}"
             member = await context.bot.get_chat_member(chat_id, user_id)
             if member.status in ["left", "kicked"]:
                 return False
-            # member, administrator, creator — hammasi ruxsat
         except Exception as e:
-            # bot kanalga qo'shilmagan yoki kanal mavjud emas bo'lsa
             print(f"Obuna tekshiruv xatosi {channel}: {e}")
-            return False   # xavfsizroq — xato bo'lsa obuna talab qilamiz
+            return False
     return True
 
 def subscription_keyboard():
@@ -172,7 +169,11 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.message.reply_text("Hozircha hech qanday film yo‘q 😔")
             return
         m = movies[code]
-        await context.bot.send_video(q.message.chat_id, m["file_id"], caption=m.get("caption", m["name"]))
+        await context.bot.forward_message(
+            q.message.chat_id,
+            from_chat_id=m["from_chat_id"],
+            message_id=m["message_id"]
+        )
         return
 
     if data == "trend":
@@ -216,7 +217,6 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.reply_text(text)
         return
 
-    # rejimga o'tish
     mode_map = {
         "add":       "add_movie",
         "delete":    "delete_movie",
@@ -227,7 +227,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data in mode_map:
         context.user_data["mode"] = mode_map[data]
         prompts = {
-            "add_movie":    "Film/video/document/gif/... yuboring yoki forward qiling",
+            "add_movie":    "Film/video/document yuboring yoki forward qiling (private kanal bo'lsa ham ishlaydi)",
             "delete_movie": "O‘chirmoqchi bo‘lgan kodni yuboring",
             "broadcast":    "Hammaga yubormoqchi bo‘lgan xabarni yuboring",
             "limit_add":    "Format: user_id limit   (masalan: 123456789 10)",
@@ -250,22 +250,19 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ─── KINO QO‘SHISH ───
     if mode == "add_movie":
-        file_id = None
-        caption = message.caption or ""
+        if not (message.video or message.document or message.animation):
+            await message.reply_text("Faqat video, document yoki animation qabul qilinadi.")
+            return
 
-        if message.video:      file_id = message.video.file_id
-        elif message.document: file_id = message.document.file_id
-        elif message.animation: file_id = message.animation.file_id
-        elif message.audio:    file_id = message.audio.file_id
-        elif message.voice:    file_id = message.voice.file_id
+        context.user_data["from_chat_id"] = message.chat.id
+        context.user_data["message_id"]   = message.message_id
+        context.user_data["name"]         = message.caption or "Nomsiz film"
+        context.user_data["mode"]         = "movie_code"
 
-        if file_id:
-            context.user_data["file"]    = file_id
-            context.user_data["caption"] = caption
-            context.user_data["mode"]    = "movie_code"
-            await message.reply_text("✅ Qabul qilindi!\nEndi qisqa kod kiriting (masalan: uzb001)")
-        else:
-            await message.reply_text("Video/document/gif/audio/voice yuboring yoki forward qiling.")
+        await message.reply_text(
+            "✅ Original xabar saqlandi!\n"
+            "Endi qisqa kod kiriting (masalan: uzb001, terminator)"
+        )
         return
 
     if mode == "movie_code":
@@ -286,12 +283,12 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         movies[code] = {
             "name": text,
-            "file_id": context.user_data["file"],
-            "caption": context.user_data.get("caption", text),
+            "from_chat_id": context.user_data["from_chat_id"],
+            "message_id": context.user_data["message_id"],
             "views": 0
         }
         save_movies(movies)
-        await message.reply_text(f"🎉 Qo‘shildi!\nKod: {code}\nNom: {text}")
+        await message.reply_text(f"🎉 Film qo‘shildi!\nKod: **{code}**\nNom: {text}")
         context.user_data.clear()
         return
 
@@ -341,8 +338,7 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return
 
-        # username ni tozalash
-        clean = text.strip().lstrip('@').split()[0]  # birinchi so‘z
+        clean = text.strip().lstrip('@').split()[0]
         if not clean:
             await message.reply_text("Kanal nomi bo‘sh bo‘lmaydi.")
             return
@@ -355,13 +351,12 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             channels.append(channel_name)
             settings["channels"] = channels
             save_settings(settings)
-            await message.reply_text(f"✅ Qo‘shildi: {channel_name}\n\n"
-                                     f"Test qilish uchun /start bosing yoki boshqa kanal qo‘shing.")
+            await message.reply_text(f"✅ Qo‘shildi: {channel_name}\nTest qilish uchun /start bosing.")
 
         context.user_data.clear()
         return
 
-    # ─── Oddiy foydalanuvchi kod yuborsa ───
+    # ─── Foydalanuvchi kod yuborsa ───
     if text and text in movies:
         if not await check_subscription(context, update.effective_user.id):
             await send_subscription_message(message, context)
@@ -373,10 +368,11 @@ async def messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_movies(movies)
         save_users(users)
 
-        await context.bot.send_video(
-            message.chat_id,
-            m["file_id"],
-            caption=m.get("caption", m["name"])
+        await context.bot.forward_message(
+            chat_id=message.chat_id,
+            from_chat_id=m["from_chat_id"],
+            message_id=m["message_id"]
+            # protect_content=True  # agar forwardni cheklamoqchi bo'lsangiz yoqing
         )
         return
 
