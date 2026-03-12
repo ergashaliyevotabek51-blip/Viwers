@@ -1,16 +1,15 @@
 import os
 
-TOKEN = "8370792264:AAFC0Zym1W3t_2yI1AipjI-lhmjouwclFNI"
+# Railway Environment Variables
+BOT_TOKEN = os.environ.get("8370792264:AAEFLn2NukQ3E63PHmAln7evLhQPBMxFP6s", "")
+BOT_USERNAME = os.environ.get("UzbekFilmTV_bot")
+ADMIN_ID = os.environ.get("ADMIN_ID", "")
 
-BOT_USERNAME = "UzbekFilmTV_bot"
+# ADMIN_IDS ro'yxati
+ADMIN_IDS = []
+if ADMIN_ID:
+    ADMIN_IDS = [aid.strip() for aid in ADMIN_ID.split(",") if aid.strip()]
 
-FREE_LIMIT = 5
-REF_LIMIT = 5
-
-USERS_FILE = "users.json"
-MOVIES_FILE = "movies.json"
-SETTINGS_FILE = "settings.json"
-
-DEFAULT_ADMINS = [774440841]
-
-LOG_CHANNEL = None
+# Tekshiruv
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN topilmadi! Railway Variables ga qo'shing.")
