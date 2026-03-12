@@ -1,58 +1,26 @@
-from database import load_json, save_json
-from config import SETTINGS_FILE, DEFAULT_ADMINS
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from users import is_admin, is_super_admin
+from database import get_users, get_movies, get_channels
 
-
-def get_settings():
-
-    return load_json(SETTINGS_FILE, {
-        "admins": DEFAULT_ADMINS,
-        "channels": []
-    })
-
-
-def save_settings(data):
-
-    save_json(SETTINGS_FILE, data)
-
-
-def get_admins():
-
-    settings = get_settings()
-
-    if "admins" not in settings:
-        settings["admins"] = DEFAULT_ADMINS
-        save_settings(settings)
-
-    return settings["admins"]
-
-
-def is_admin(uid):
-
-    return uid in get_admins()
-
-
-def add_admin(uid):
-
-    settings = get_settings()
-
-    if uid not in settings["admins"]:
-        settings["admins"].append(uid)
-        save_settings(settings)
-
-        return True
-
-    return False
-
-
-def remove_admin(uid):
-
-    settings = get_settings()
-
-    if uid in settings["admins"]:
-
-        settings["admins"].remove(uid)
-        save_settings(settings)
-
-        return True
-
-    return False
+async def show_admin_panel(query, user_id: str):
+    if not is_admin(user_id):
+        await query.answer("Ruxsat yoq!", show_alert=True)
+        return
+    
+    total_users = len(get_users())
+    total_movies = len(get_movies())
+    
+    role = "Super Admin" if is_super_admin(user_id) else "Admin"
+    
+    text = (
+        f"Admin panel\n"
+        f"Status: {role}\n\n"
+        f"Foydalanuvchilar: {total_users}\n"
+        f"Kinolar: {total_movies}\n"
+        f"Kanallar: {len(get_channels())}"
+    )
+    
+    # Keyboard qaytarish
+    from utils import get_admin_keyboard
+    await query.edit_message_text(text, reply_markup=get_admin_keyboard(user_id))
