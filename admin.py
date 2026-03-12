@@ -14,24 +14,24 @@ def is_super_admin(user_id: str) -> bool:
 
 async def show_admin_panel(query, user_id: str):
     if not is_admin(user_id):
-        await query.answer("Ruxsat yo'q!", show_alert=True)
+        await query.answer("🚫 Ruxsat yo'q!", show_alert=True)
         return
     
     total_users = len(get_users())
     total_movies = len(get_movies())
     
-    role = "Super Admin" if is_super_admin(user_id) else "Admin"
+    role = "👑 Super Admin" if is_super_admin(user_id) else "👮 Admin"
     
     text = (
-        f"Admin panel\n"
-        f"Status: {role}\n\n"
-        f"Foydalanuvchilar: {total_users}\n"
-        f"Kinolar: {total_movies}\n"
-        f"Kanallar: {len(get_channels())}"
+        f"🛠 <b>Admin panel</b>\n"
+        f"🎭 <b>Status:</b> {role}\n\n"
+        f"👥 <b>Foydalanuvchilar:</b> <code>{total_users}</code>\n"
+        f"🎬 <b>Kinolar:</b> <code>{total_movies}</code>\n"
+        f"📢 <b>Majburiy kanallar:</b> <code>{len(get_channels())}</code>"
     )
     
     from utils import get_admin_keyboard
-    await query.edit_message_text(text, reply_markup=get_admin_keyboard(user_id))
+    await query.edit_message_text(text, reply_markup=get_admin_keyboard(user_id), parse_mode='HTML')
 
 async def start_add_movie(query, context):
     if not is_admin(str(query.from_user.id)):
@@ -39,12 +39,13 @@ async def start_add_movie(query, context):
     
     context.user_data["adding_movie"] = {"step": "forward"}
     await query.edit_message_text(
-        "Kino qo'shish:\n\n"
-        "1. Kanaldan film forward qiling\n"
-        "2. Kod kiriting (masalan: uzb001)\n"
-        "3. Film nomini yozing\n"
-        "4. Janr kiriting (ixtiyoriy)\n\n"
-        "Bekor qilish: /cancel"
+        "➕ <b>Kino qo'shish</b>\n\n"
+        "1️⃣ Kanaldan film/video forward qiling\n"
+        "2️⃣ Kod kiriting (masalan: <code>uzb001</code>)\n"
+        "3️⃣ Film nomini to'liq yozing\n"
+        "4️⃣ Janr kiriting (ixtiyoriy)\n\n"
+        "❌ Bekor qilish: /cancel",
+        parse_mode='HTML'
     )
 
 async def process_add_movie(update, context):
@@ -56,22 +57,22 @@ async def process_add_movie(update, context):
         user_data["channel_id"] = update.message.forward_from_chat.id
         user_data["message_id"] = update.message.forward_from_message_id
         user_data["step"] = "code"
-        await update.message.reply_text("Saqlandi! Endi kod kiriting:")
+        await update.message.reply_text("✅ <b>Saqlandi!</b> Endi kod kiriting:", parse_mode='HTML')
     
     elif step == "code":
         code = update.message.text.strip().lower()
         movies = get_movies()
         if code in movies:
-            await update.message.reply_text("Bu kod allaqachon mavjud! Boshqa kod:")
+            await update.message.reply_text("❌ <b>Bu kod allaqachon mavjud!</b>\nBoshqa kod kiriting:", parse_mode='HTML')
             return
         user_data["code"] = code
         user_data["step"] = "name"
-        await update.message.reply_text("Kod saqlandi! Film nomini yozing:")
+        await update.message.reply_text("✅ <b>Kod saqlandi!</b>\nFilm nomini yozing:", parse_mode='HTML')
     
     elif step == "name":
         user_data["name"] = update.message.text.strip()
         user_data["step"] = "genre"
-        await update.message.reply_text("Nom saqlandi! Janr kiriting (yo'q bo'lsa 'skip' deb yozing):")
+        await update.message.reply_text("✅ <b>Nom saqlandi!</b>\nJanr kiriting (yo'q bo'lsa <code>skip</code>):", parse_mode='HTML')
     
     elif step == "genre":
         genre = update.message.text.strip()
@@ -88,9 +89,16 @@ async def process_add_movie(update, context):
         )
         
         del context.user_data["adding_movie"]
+        
+        genre_display = genre if genre else "🎬 Belgilanmagan"
+        
         await update.message.reply_text(
-            f"Kino qo'shildi!\n\nKod: {user_data['code']}\nNomi: {user_data['name']}",
-            reply_markup=get_admin_keyboard(str(update.effective_user.id))
+            f"✅ <b>Kino muvaffaqiyatli qo'shildi!</b>\n\n"
+            f"🎬 <b>Kod:</b> <code>{user_data['code']}</code>\n"
+            f"📝 <b>Nomi:</b> {user_data['name']}\n"
+            f"🎭 <b>Janr:</b> {genre_display}",
+            reply_markup=get_admin_keyboard(str(update.effective_user.id)),
+            parse_mode='HTML'
         )
 
 async def start_delete_movie(query):
@@ -100,20 +108,20 @@ async def start_delete_movie(query):
     movies = get_movies()
     if not movies:
         from utils import get_admin_keyboard
-        await query.edit_message_text("Kinolar mavjud emas!", reply_markup=get_admin_keyboard(str(query.from_user.id)))
+        await query.edit_message_text("🎬 <b>Kinolar mavjud emas!</b>", reply_markup=get_admin_keyboard(str(query.from_user.id)), parse_mode='HTML')
         return
     
     keyboard = []
     for code, data in list(movies.items())[:20]:
-        keyboard.append([InlineKeyboardButton(f"{data.get('name', code)} ({code})", callback_data=f"del_movie_{code}")])
+        keyboard.append([InlineKeyboardButton(f"🎬 {data.get('name', code)[:30]} ({code})", callback_data=f"del_movie_{code}")])
     
-    keyboard.append([InlineKeyboardButton("Orqaga", callback_data="admin_panel")])
-    await query.edit_message_text("O'chirish uchun tanlang:", reply_markup=InlineKeyboardMarkup(keyboard))
+    keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="admin_panel")])
+    await query.edit_message_text("➖ <b>O'chirish uchun kinoni tanlang:</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
 
 async def delete_movie(query, movie_code: str):
     from movies import delete_movie as remove_movie
     if remove_movie(movie_code):
-        await query.answer("Kino o'chirildi!", show_alert=True)
+        await query.answer("✅ Kino o'chirildi!", show_alert=True)
     await start_delete_movie(query)
 
 async def show_stats(query):
@@ -129,22 +137,29 @@ async def show_stats(query):
     views = sum(m.get("views", 0) for m in movies.values())
     
     text = (
-        f"Statistika:\n\n"
-        f"Foydalanuvchilar: {total_users}\n"
-        f"Kinolar: {total_movies}\n"
-        f"Ko'rishlar: {views}\n"
-        f"Bloklangan: {banned}"
+        f"📊 <b>Bot statistikasi</b>\n\n"
+        f"👥 <b>Jami foydalanuvchilar:</b> <code>{total_users}</code>\n"
+        f"🎬 <b>Jami kinolar:</b> <code>{total_movies}</code>\n"
+        f"👁 <b>Jami ko'rishlar:</b> <code>{views}</code>\n"
+        f"🚫 <b>Bloklangan:</b> <code>{banned}</code>\n"
+        f"📢 <b>Kanallar:</b> <code>{len(get_channels())}</code>\n"
+        f"👮 <b>Adminlar:</b> <code>{len(get_admins())}</code>"
     )
     
     from utils import get_admin_keyboard
-    await query.edit_message_text(text, reply_markup=get_admin_keyboard(str(query.from_user.id)))
+    await query.edit_message_text(text, reply_markup=get_admin_keyboard(str(query.from_user.id)), parse_mode='HTML')
 
 async def start_broadcast(query, context):
     if not is_admin(str(query.from_user.id)):
         return
     
     context.user_data["broadcasting"] = True
-    await query.edit_message_text("Broadcast xabarini kiriting:\nBekor qilish: /cancel")
+    await query.edit_message_text(
+        "📢 <b>Broadcast xabar</b>\n\n"
+        "Yuboriladigan xabarni kiriting:\n"
+        "❌ Bekor qilish: /cancel",
+        parse_mode='HTML'
+    )
 
 async def process_broadcast(update, context):
     if not context.user_data.get("broadcasting"):
@@ -156,7 +171,7 @@ async def process_broadcast(update, context):
     sent = 0
     failed = 0
     
-    status = await update.message.reply_text("Yuborilmoqda...")
+    status = await update.message.reply_text("📤 <b>Yuborilmoqda...</b>", parse_mode='HTML')
     
     for user_id in users:
         try:
@@ -165,21 +180,31 @@ async def process_broadcast(update, context):
         except:
             failed += 1
     
-    await status.edit_text(f"Yakunlandi! Muvaffaqiyatli: {sent}, Xatolik: {failed}")
+    await status.edit_text(
+        f"✅ <b>Broadcast yakunlandi!</b>\n\n"
+        f"✓ <b>Muvaffaqiyatli:</b> <code>{sent}</code>\n"
+        f"✗ <b>Xatolik:</b> <code>{failed}</code>",
+        parse_mode='HTML'
+    )
 
 async def manage_channels(query):
     if not is_admin(str(query.from_user.id)):
         return
     
     from utils import get_channels_keyboard
-    await query.edit_message_text("Kanallar:", reply_markup=get_channels_keyboard())
+    await query.edit_message_text("🔒 <b>Majburiy obuna kanallari</b>", reply_markup=get_channels_keyboard(), parse_mode='HTML')
 
 async def start_add_channel(query, context):
     if not is_admin(str(query.from_user.id)):
         return
     
     context.user_data["adding_channel"] = True
-    await query.edit_message_text("Kanal ID sini yuboring (masalan: -1001234567890):\nBekor: /cancel")
+    await query.edit_message_text(
+        "➕ <b>Kanal qo'shish</b>\n\n"
+        "Kanal ID sini yuboring (masalan: <code>-1001234567890</code>):\n"
+        "❌ Bekor qilish: /cancel",
+        parse_mode='HTML'
+    )
 
 async def process_add_channel(update, context):
     if not context.user_data.get("adding_channel"):
@@ -196,14 +221,14 @@ async def process_add_channel(update, context):
             chat.invite_link or (f"https://t.me/{chat.username}" if chat.username else "")
         )
         del context.user_data["adding_channel"]
-        await update.message.reply_text(f"Kanal qo'shildi: {chat.title}")
+        await update.message.reply_text(f"✅ <b>Kanal qo'shildi:</b> {chat.title}", parse_mode='HTML')
     except Exception as e:
-        await update.message.reply_text(f"Xatolik: {e}")
+        await update.message.reply_text(f"❌ <b>Xatolik:</b> {e}", parse_mode='HTML')
 
 async def remove_channel_handler(query, channel_id: str):
     from subscription import remove_channel
     if remove_channel(channel_id):
-        await query.answer("Kanal o'chirildi!", show_alert=True)
+        await query.answer("✅ Kanal o'chirildi!", show_alert=True)
     await manage_channels(query)
 
 async def start_add_limit(query, context):
@@ -211,7 +236,12 @@ async def start_add_limit(query, context):
         return
     
     context.user_data["adding_limit"] = {"step": "user"}
-    await query.edit_message_text("Foydalanuvchi ID sini kiriting:\nBekor: /cancel")
+    await query.edit_message_text(
+        "💠 <b>Limit qo'shish</b>\n\n"
+        "Foydalanuvchi ID sini kiriting:\n"
+        "❌ Bekor qilish: /cancel",
+        parse_mode='HTML'
+    )
 
 async def process_add_limit(update, context):
     from users import add_limit
@@ -221,11 +251,11 @@ async def process_add_limit(update, context):
     if step == "user":
         user_id = update.message.text.strip()
         if user_id not in get_users():
-            await update.message.reply_text("Foydalanuvchi topilmadi!")
+            await update.message.reply_text("❌ <b>Foydalanuvchi topilmadi!</b>", parse_mode='HTML')
             return
         context.user_data["adding_limit"]["target_user"] = user_id
         context.user_data["adding_limit"]["step"] = "amount"
-        await update.message.reply_text("Limit miqdorini kiriting:")
+        await update.message.reply_text("✅ <b>Endi limit miqdorini kiriting:</b>", parse_mode='HTML')
     
     elif step == "amount":
         try:
@@ -233,16 +263,21 @@ async def process_add_limit(update, context):
             target = context.user_data["adding_limit"]["target_user"]
             add_limit(target, amount)
             del context.user_data["adding_limit"]
-            await update.message.reply_text(f"{target} ga {amount} limit qo'shildi!")
+            await update.message.reply_text(f"✅ <b>{target}</b> ga <code>{amount}</code> limit qo'shildi!", parse_mode='HTML')
         except ValueError:
-            await update.message.reply_text("Raqam kiriting!")
+            await update.message.reply_text("❌ <b>Raqam kiriting!</b>", parse_mode='HTML')
 
 async def start_ban_user(query, context):
     if not is_admin(str(query.from_user.id)):
         return
     
     context.user_data["banning_user"] = True
-    await query.edit_message_text("Foydalanuvchi ID sini kiriting:\nBekor: /cancel")
+    await query.edit_message_text(
+        "👤 <b>User ban qilish</b>\n\n"
+        "Foydalanuvchi ID sini kiriting:\n"
+        "❌ Bekor qilish: /cancel",
+        parse_mode='HTML'
+    )
 
 async def process_ban_user(update, context):
     from users import ban_user
@@ -252,13 +287,13 @@ async def process_ban_user(update, context):
     user_id = update.message.text.strip()
     
     if is_admin(user_id):
-        await update.message.reply_text("Adminni ban qilish mumkin emas!")
+        await update.message.reply_text("❌ <b>Adminni ban qilish mumkin emas!</b>", parse_mode='HTML')
         del context.user_data["banning_user"]
         return
     
     ban_user(user_id)
     del context.user_data["banning_user"]
-    await update.message.reply_text(f"{user_id} bloklandi!")
+    await update.message.reply_text(f"🚫 <b>{user_id}</b> bloklandi!", parse_mode='HTML')
 
 async def start_unban_user(query):
     if not is_admin(str(query.from_user.id)):
@@ -269,21 +304,21 @@ async def start_unban_user(query):
     
     if not banned:
         from utils import get_admin_keyboard
-        await query.edit_message_text("Bloklanganlar yo'q!", reply_markup=get_admin_keyboard(str(query.from_user.id)))
+        await query.edit_message_text("✅ <b>Bloklangan foydalanuvchilar yo'q!</b>", reply_markup=get_admin_keyboard(str(query.from_user.id)), parse_mode='HTML')
         return
     
     keyboard = []
     for uid, u in banned[:20]:
         name = u.get("first_name", "Nomlum")
-        keyboard.append([InlineKeyboardButton(f"Ochirish {name} ({uid})", callback_data=f"unban_user_{uid}")])
+        keyboard.append([InlineKeyboardButton(f"♻️ {name[:20]} ({uid})", callback_data=f"unban_user_{uid}")])
     
-    keyboard.append([InlineKeyboardButton("Orqaga", callback_data="admin_panel")])
-    await query.edit_message_text("Tanlang:", reply_markup=InlineKeyboardMarkup(keyboard))
+    keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="admin_panel")])
+    await query.edit_message_text("♻️ <b>Blokdan ochish uchun tanlang:</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
 
 async def unban_user_handler(query, user_id: str):
     from users import unban_user
     unban_user(user_id)
-    await query.answer("Blokdan chiqarildi!", show_alert=True)
+    await query.answer("✅ Foydalanuvchi blokdan chiqarildi!", show_alert=True)
     await start_unban_user(query)
 
 async def create_backup(query):
@@ -293,9 +328,9 @@ async def create_backup(query):
     try:
         backup_dir = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         shutil.copytree("data", backup_dir)
-        await query.answer(f"Backup: {backup_dir}", show_alert=True)
+        await query.answer(f"✅ Backup: {backup_dir}", show_alert=True)
     except Exception as e:
-        await query.answer("Xatolik!", show_alert=True)
+        await query.answer("❌ Xatolik!", show_alert=True)
 
 async def export_data(query):
     if not is_admin(str(query.from_user.id)):
@@ -309,11 +344,16 @@ async def export_data(query):
 
 async def start_add_admin(query, context):
     if not is_super_admin(str(query.from_user.id)):
-        await query.answer("Faqat super admin!", show_alert=True)
+        await query.answer("🚫 Faqat super admin!", show_alert=True)
         return
     
     context.user_data["adding_admin"] = True
-    await query.edit_message_text("Yangi admin ID:\nBekor: /cancel")
+    await query.edit_message_text(
+        "👮 <b>Admin qo'shish</b>\n\n"
+        "Yangi admin ID sini kiriting:\n"
+        "❌ Bekor qilish: /cancel",
+        parse_mode='HTML'
+    )
 
 async def process_add_admin(update, context):
     if not context.user_data.get("adding_admin"):
@@ -322,13 +362,13 @@ async def process_add_admin(update, context):
     new_id = update.message.text.strip()
     
     if new_id == str(update.effective_user.id):
-        await update.message.reply_text("O'zingizni emas!")
+        await update.message.reply_text("❌ <b>O'zingizni emas!</b>", parse_mode='HTML')
         del context.user_data["adding_admin"]
         return
     
     admins = get_admins()
     if new_id in admins:
-        await update.message.reply_text("Allaqachon admin!")
+        await update.message.reply_text("❌ <b>Allaqachon admin!</b>", parse_mode='HTML')
         del context.user_data["adding_admin"]
         return
     
@@ -340,11 +380,11 @@ async def process_add_admin(update, context):
     }
     save_admins(admins)
     del context.user_data["adding_admin"]
-    await update.message.reply_text(f"{new_id} admin qilindi!")
+    await update.message.reply_text(f"✅ <b>{new_id}</b> admin qilindi!", parse_mode='HTML')
 
 async def start_remove_admin(query):
     if not is_super_admin(str(query.from_user.id)):
-        await query.answer("Faqat super admin!", show_alert=True)
+        await query.answer("🚫 Faqat super admin!", show_alert=True)
         return
     
     admins = get_admins()
@@ -353,20 +393,20 @@ async def start_remove_admin(query):
     
     if not removable:
         from utils import get_admin_keyboard
-        await query.edit_message_text("O'chiriladigan admin yo'q!", reply_markup=get_admin_keyboard(str(query.from_user.id)))
+        await query.edit_message_text("✅ <b>O'chiriladigan admin yo'q!</b>", reply_markup=get_admin_keyboard(str(query.from_user.id)), parse_mode='HTML')
         return
     
     keyboard = []
     for aid, a in removable:
-        keyboard.append([InlineKeyboardButton(f"O'chirish {aid}", callback_data=f"rem_admin_{aid}")])
+        keyboard.append([InlineKeyboardButton(f"❌ {aid}", callback_data=f"rem_admin_{aid}")])
     
-    keyboard.append([InlineKeyboardButton("Orqaga", callback_data="admin_panel")])
-    await query.edit_message_text("Tanlang:", reply_markup=InlineKeyboardMarkup(keyboard))
+    keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="admin_panel")])
+    await query.edit_message_text("❌ <b>O'chirish uchun tanlang:</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
 
 async def remove_admin_handler(query, admin_id: str):
     admins = get_admins()
     if admin_id in admins and admins[admin_id].get("source") == "manual":
         del admins[admin_id]
         save_admins(admins)
-        await query.answer("Admin o'chirildi!", show_alert=True)
+        await query.answer("✅ Admin o'chirildi!", show_alert=True)
     await start_remove_admin(query)
