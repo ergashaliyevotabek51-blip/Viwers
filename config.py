@@ -1,15 +1,22 @@
 import os
 
 # Railway Environment Variables
-BOT_TOKEN = os.environ.get("8370792264:AAEFLn2NukQ3E63PHmAln7evLhQPBMxFP6s", "")
-BOT_USERNAME = os.environ.get("UzbekFilmTV_bot")
-ADMIN_ID = os.environ.get("774440841", "")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "UzbekFilmTV_bot")
+ADMIN_ID = os.environ.get("ADMIN_ID", "")
 
 # ADMIN_IDS ro'yxati
 ADMIN_IDS = []
 if ADMIN_ID:
     ADMIN_IDS = [aid.strip() for aid in ADMIN_ID.split(",") if aid.strip()]
 
-# Tekshiruv
+# Tekshiruv - faqat print, raise emas
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN topilmadi! Railway Variables ga qo'shing.")
+    print("WARNING: BOT_TOKEN topilmadi! Railway Variables ga qo'shing.")
+    print(f"Mavjud variablelar: {list(os.environ.keys())}")
+    # Default token (bo'sh) - main() da tekshiramiz
+    BOT_TOKEN = ""
+
+print(f"Config yuklandi: @{BOT_USERNAME}")
+print(f"Token uzunligi: {len(BOT_TOKEN)}")
+print(f"Admins: {ADMIN_IDS}")
