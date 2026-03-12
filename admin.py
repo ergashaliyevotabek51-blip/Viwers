@@ -6,10 +6,6 @@ from telegram.ext import ContextTypes
 from database import get_users, save_users, get_movies, save_movies, get_channels, save_channels, get_admins, save_admins, USERS_FILE, MOVIES_FILE, CHANNELS_FILE
 from config import ADMIN_IDS
 
-# ESKI (9-12 qatorlar):
-def is_admin(user_id: str) -> bool:
-    return user_id in ADMIN_IDS
-
 # YANGI:
 def is_admin(user_id: str) -> bool:
     """Admin tekshiruvi - config VA database'dan"""
