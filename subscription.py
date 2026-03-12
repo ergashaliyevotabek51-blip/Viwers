@@ -1,6 +1,8 @@
-from database import get_channels
+from database import get_channels, save_channels
+from datetime import datetime
 
 async def check_subscription(user_id: int, context) -> bool:
+    """Majburiy obunani tekshirish"""
     channels = get_channels()
     if not channels:
         return True
@@ -23,7 +25,6 @@ async def check_subscription(user_id: int, context) -> bool:
 
 def add_channel(channel_id: str, name: str, invite_link: str = ""):
     """Kanal qo'shish - ID yoki username bo'lishi mumkin"""
-    from database import get_channels, save_channels
     channels = get_channels()
     
     # Agar username bo'lsa (@ bilan boshlansa)
@@ -41,12 +42,12 @@ def add_channel(channel_id: str, name: str, invite_link: str = ""):
     channels[clean_id] = {
         "name": name,
         "invite_link": invite_link,
-        "added_at": __import__('datetime').datetime.now().isoformat()
+        "added_at": datetime.now().isoformat()
     }
     save_channels(channels)
 
 def remove_channel(channel_id: str) -> bool:
-    from database import get_channels, save_channels
+    """Kanal o'chirish"""
     channels = get_channels()
     if channel_id in channels:
         del channels[channel_id]
