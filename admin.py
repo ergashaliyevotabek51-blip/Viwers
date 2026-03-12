@@ -58,21 +58,25 @@ async def show_admin_panel(query, user_id: str):
     from utils import get_admin_keyboard
     await query.edit_message_text(text, reply_markup=get_admin_keyboard(user_id), parse_mode='HTML')
 
-# ==================== KINO QO'SHISH ====================
+# ==================== KINO QO'SHISH (ANIQ ISHLAYDIGAN) ====================
 
 async def start_add_movie(query, context):
+    """Kino qo'shishni boshlash"""
     if not is_admin(str(query.from_user.id)):
         await query.answer("🚫 Ruxsat yo'q!", show_alert=True)
         return
     
-    context.user_data.pop("adding_movie", None)
+    # Tozalash
+    if "adding_movie" in context.user_data:
+        del context.user_data["adding_movie"]
+    
     context.user_data["adding_movie"] = {"step": "forward"}
     
     text = (
         "➕ <b>YANGI KINO QO'SHISH</b>\n\n"
         "📋 <b>Qo'llanma:</b>\n"
         "1️⃣ Kanalingizga kiring\n"
-        "2️⃣ Kino postini <b>forward</b> qiling (shu yerga)\n"
+        "2️⃣ Kino postini <b>forward</b> qiling\n"
         "3️⃣ Kod, nom va janr kiriting\n\n"
         "⚠️ <i>Bot kanalda admin bo'lishi shart!</i>\n\n"
         "❌ Bekor qilish: /cancel"
@@ -82,19 +86,35 @@ async def start_add_movie(query, context):
 
 
 async def process_add_movie(update, context):
-    from movies import add_movie
+    """Kino qo'shish jarayoni - ANIQ ISHLAYDIGAN"""
+    # Import movies modulini ichida qilamiz
+    try:
+        from movies import add_movie as movies_add_movie
+    except ImportError as e:
+        print(f"ERROR: movies modulini import qilishda xato: {e}")
+        await update.message.reply_text("❌ <b>Tizim xatosi!</b>", parse_mode='HTML')
+        context.user_data.pop("adding_movie", None)
+        return
     
+    # Tekshirish
     if "adding_movie" not in context.user_data:
+        print("DEBUG: adding_movie yo'q")
         return
     
     user_data = context.user_data["adding_movie"]
     step = user_data.get("step", "forward")
     
-    # FORWARD QABUL QILISH
+    print(f"DEBUG: Step = {step}")
+    print(f"DEBUG: Message text = {update.message.text if update.message.text else 'None'}")
+    print(f"DEBUG: Forward = {update.message.forward_from_chat is not None}")
+    
+    # ========== FORWARD QABUL QILISH ==========
     if step == "forward":
+        # Forward qilinganmi tekshirish
         if not update.message.forward_from_chat:
             await update.message.reply_text(
                 "❌ <b>Iltimos, kanaldan kino forward qiling!</b>\n\n"
+                "📤 Kanaldan postni ushlab turib, shu yerga yuboring.\n\n"
                 "❌ Bekor qilish: /cancel",
                 parse_mode='HTML'
             )
@@ -104,9 +124,13 @@ async def process_add_movie(update, context):
             channel_id = update.message.forward_from_chat.id
             message_id = update.message.forward_from_message_id
             
-            # Bot adminligini tekshirish
+            print(f"DEBUG: Channel ID = {channel_id}, Message ID = {message_id}")
+            
+            # Bot adminligini tekshirish (ixtiyoriy)
             try:
                 chat_member = await context.bot.get_chat_member(channel_id, context.bot.id)
+                print(f"DEBUG: Bot status = {chat_member.status}")
+                
                 if chat_member.status not in ['administrator', 'creator']:
                     await update.message.reply_text(
                         "❌ <b>Xatolik!</b>\n\n"
@@ -119,41 +143,54 @@ async def process_add_movie(update, context):
                     return
             except Exception as e:
                 print(f"Admin tekshirish xatosi: {e}")
+                # Ogohlantirish bilan davom etamiz
+                pass
             
-            # Saqlash va keyingi bosqichga o'tish
+            # Saqlash
             user_data["channel_id"] = channel_id
             user_data["message_id"] = message_id
             user_data["step"] = "code"
             
+            # MUHIM: Xabar yuborish
             await update.message.reply_text(
                 "✅ <b>Kino posti qabul qilindi!</b>\n\n"
+                f"📢 Kanal ID: <code>{channel_id}</code>\n"
+                f"🆔 Xabar ID: <code>{message_id}</code>\n\n"
                 "📝 Endi <b>kod</b> kiriting:\n"
-                "<i>Masalan: uzb001, film2024</i>\n\n"
+                "<i>Masalan: uzb001</i>\n\n"
                 "❌ Bekor qilish: /cancel",
                 parse_mode='HTML'
             )
+            print("DEBUG: Kod kiritish xabari yuborildi")
             return
             
         except Exception as e:
+            print(f"ERROR Forward qabul qilishda: {e}")
             await update.message.reply_text(
-                f"❌ <b>Xatolik:</b> <code>{e}</code>",
+                f"❌ <b>Xatolik:</b> <code>{e}</code>\n\n"
+                "Qayta urinib ko'ring.",
                 parse_mode='HTML'
             )
             return
     
-    # KOD KIRITISH
+    # ========== KOD KIRITISH ==========
     elif step == "code":
-        code = update.message.text.strip().lower()
-        movies = get_movies()
+        code = update.message.text.strip().lower() if update.message.text else ""
         
         if not code:
-            await update.message.reply_text("❌ <b>Kod bo'sh bo'lishi mumkin emas!</b>", parse_mode='HTML')
+            await update.message.reply_text(
+                "❌ <b>Kod bo'sh bo'lishi mumkin emas!</b>\n\n"
+                "Qayta kiriting:",
+                parse_mode='HTML'
+            )
             return
+        
+        movies = get_movies()
         
         if code in movies:
             movie_name = movies[code].get('name', 'Nomalum')
             await update.message.reply_text(
-                f"❌ <b>Bu kod allaqachon mavjud!</b>\n\n"
+                "❌ <b>Bu kod allaqachon mavjud!</b>\n\n"
                 f"🎬 Film: <b>{movie_name}</b>\n"
                 f"📝 <b>Boshqa kod kiriting:</b>",
                 parse_mode='HTML'
@@ -170,12 +207,15 @@ async def process_add_movie(update, context):
         )
         return
     
-    # NOM KIRITISH
+    # ========== NOM KIRITISH ==========
     elif step == "name":
-        name = update.message.text.strip()
+        name = update.message.text.strip() if update.message.text else ""
         
         if not name:
-            await update.message.reply_text("❌ <b>Nom bo'sh bo'lishi mumkin emas!</b>", parse_mode='HTML')
+            await update.message.reply_text(
+                "❌ <b>Nom bo'sh bo'lishi mumkin emas!</b>",
+                parse_mode='HTML'
+            )
             return
         
         user_data["name"] = name
@@ -188,13 +228,14 @@ async def process_add_movie(update, context):
         )
         return
     
-    # JANR KIRITISH
+    # ========== JANR KIRITISH ==========
     elif step == "genre":
-        genre_text = update.message.text.strip()
+        genre_text = update.message.text.strip() if update.message.text else ""
         genre = "" if genre_text.lower() == "skip" else genre_text
         
         try:
-            add_movie(
+            # Kino saqlash
+            movies_add_movie(
                 user_data["code"],
                 user_data["name"],
                 genre,
@@ -203,6 +244,7 @@ async def process_add_movie(update, context):
                 str(update.effective_user.id)
             )
             
+            # Tozalash
             context.user_data.pop("adding_movie", None)
             
             genre_display = f"🎭 {genre}" if genre else "🎬 Belgilanmagan"
@@ -223,11 +265,25 @@ async def process_add_movie(update, context):
             )
             
         except Exception as e:
-            await update.message.reply_text(f"❌ <b>Xatolik:</b> <code>{e}</code>", parse_mode='HTML')
+            print(f"ERROR Kino saqlashda: {e}")
+            await update.message.reply_text(
+                f"❌ <b>Xatolik:</b> <code>{e}</code>",
+                parse_mode='HTML'
+            )
             context.user_data.pop("adding_movie", None)
         return
+    
+    # ========== NOTO'G'RI STEP ==========
+    else:
+        print(f"ERROR: Noto'g'ri step: {step}")
+        await update.message.reply_text(
+            "❌ <b>Xatolik!</b> /cancel yozing.",
+            parse_mode='HTML'
+        )
+        context.user_data.pop("adding_movie", None)
 
-# ==================== KINO O'CHIRISH ====================
+
+# ==================== QOLGAN FUNKSiyalar ====================
 
 async def start_delete_movie(query):
     if not is_admin(str(query.from_user.id)):
@@ -257,7 +313,7 @@ async def start_delete_movie(query):
     
     await query.edit_message_text(
         "➖ <b>KINO O'CHIRISH</b>\n\n"
-        f"<i>Jami: {len(movies)} ta kino</i>",
+        f"<i>Jami: {len(movies)} ta</i>",
         reply_markup=InlineKeyboardMarkup(keyboard), 
         parse_mode='HTML'
     )
@@ -271,8 +327,6 @@ async def delete_movie(query, movie_code: str):
         await query.answer("❌ Xatolik!", show_alert=True)
     
     await start_delete_movie(query)
-
-# ==================== STATISTIKA ====================
 
 async def show_stats(query):
     if not is_admin(str(query.from_user.id)):
@@ -306,8 +360,6 @@ async def show_stats(query):
         reply_markup=get_admin_keyboard(str(query.from_user.id)), 
         parse_mode='HTML'
     )
-
-# ==================== BROADCAST ====================
 
 async def start_broadcast(query, context):
     if not is_admin(str(query.from_user.id)):
@@ -349,8 +401,6 @@ async def process_broadcast(update, context):
         parse_mode='HTML'
     )
 
-# ==================== KANALLAR ====================
-
 async def manage_channels(query):
     if not is_admin(str(query.from_user.id)):
         await query.answer("🚫 Ruxsat yo'q!", show_alert=True)
@@ -361,7 +411,7 @@ async def manage_channels(query):
     if not channels:
         text = "🔒 <b>MAJBURIY OBUNA</b>\n\n📭 Kanallar yo'q"
     else:
-        text = f"🔒 <b>MAJBURIY OBUNA</b>\n\n📢 Jami: <code>{len(channels)}</code> ta kanal"
+        text = f"🔒 <b>MAJBURIY OBUNA</b>\n\n📢 Jami: <code>{len(channels)}</code> ta"
     
     from utils import get_channels_keyboard
     await query.edit_message_text(text, reply_markup=get_channels_keyboard(), parse_mode='HTML')
@@ -375,7 +425,7 @@ async def start_add_channel(query, context):
     
     await query.edit_message_text(
         "➕ <b>KANAL QO'SHISH</b>\n\n"
-        "Username, link yoki ID yuboring:\n"
+        "Username yoki link yuboring:\n"
         "<i>@channel yoki https://t.me/channel</i>\n\n"
         "❌ Bekor qilish: /cancel",
         parse_mode='HTML'
@@ -423,8 +473,6 @@ async def remove_channel_handler(query, channel_id: str):
     
     await manage_channels(query)
 
-# ==================== LIMIT ====================
-
 async def start_add_limit(query, context):
     if not is_admin(str(query.from_user.id)):
         await query.answer("🚫 Ruxsat yo'q!", show_alert=True)
@@ -471,8 +519,6 @@ async def process_add_limit(update, context):
             
         except ValueError:
             await update.message.reply_text("❌ Faqat raqam!", parse_mode='HTML')
-
-# ==================== BAN/UNBAN ====================
 
 async def start_ban_user(query, context):
     if not is_admin(str(query.from_user.id)):
@@ -548,8 +594,6 @@ async def unban_user_handler(query, user_id: str):
     await query.answer("✅ Blokdan chiqarildi!", show_alert=True)
     await start_unban_user(query)
 
-# ==================== BACKUP/EXPORT ====================
-
 async def create_backup(query):
     if not is_admin(str(query.from_user.id)):
         await query.answer("🚫 Ruxsat yo'q!", show_alert=True)
@@ -596,8 +640,6 @@ async def export_data(query):
         reply_markup=get_admin_keyboard(str(query.from_user.id)),
         parse_mode='HTML'
     )
-
-# ==================== SUPER ADMIN ====================
 
 async def start_add_admin(query, context):
     if not is_super_admin(str(query.from_user.id)):
