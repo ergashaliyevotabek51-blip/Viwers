@@ -9,34 +9,47 @@ from telegram.ext import (
     filters
 )
 
-from config import BOT_TOKEN, BOT_USERNAME, ADMIN_IDS
-from database import get_users, get_movies
-from users import (
-    get_or_create_user, is_admin, is_banned, is_super_admin,
-    check_limit, decrease_limit, add_referral, add_to_history,
-    toggle_favorite, add_limit, ban_user, unban_user
-)
-from movies import (
-    get_random_movie, get_trending_movies, search_movies,
-    get_movies_by_genre, increment_movie_views, delete_movie
-)
-from subscription import check_subscription
-from utils import (
-    get_main_keyboard, get_movie_keyboard, get_admin_keyboard,
-    get_genres_keyboard, get_catalog_keyboard, get_subscription_keyboard,
-    get_channels_keyboard
-)
-from admin import (
-    show_admin_panel, start_add_movie, process_add_movie,
-    start_delete_movie, delete_movie as admin_delete_movie,
-    show_stats, start_broadcast, process_broadcast,
-    manage_channels, start_add_channel, process_add_channel,
-    remove_channel_handler, start_add_limit, process_add_limit,
-    start_ban_user, process_ban_user, start_unban_user,
-    unban_user_handler, create_backup, export_data,
-    start_add_admin, process_add_admin, start_remove_admin,
-    remove_admin_handler
-)
+# Config import - xato bo'lsa ham davom etamiz
+try:
+    from config import BOT_TOKEN, BOT_USERNAME, ADMIN_IDS
+except Exception as e:
+    print(f"Config import xato: {e}")
+    BOT_TOKEN = ""
+    BOT_USERNAME = "UzbekFilmTV_bot"
+    ADMIN_IDS = []
+
+# Qolgan importlar
+try:
+    from database import get_users, get_movies
+    from users import (
+        get_or_create_user, is_admin, is_banned, is_super_admin,
+        check_limit, decrease_limit, add_referral, add_to_history,
+        toggle_favorite, add_limit, ban_user, unban_user
+    )
+    from movies import (
+        get_random_movie, get_trending_movies, search_movies,
+        get_movies_by_genre, increment_movie_views, delete_movie
+    )
+    from subscription import check_subscription
+    from utils import (
+        get_main_keyboard, get_movie_keyboard, get_admin_keyboard,
+        get_genres_keyboard, get_catalog_keyboard, get_subscription_keyboard,
+        get_channels_keyboard
+    )
+    from admin import (
+        show_admin_panel, start_add_movie, process_add_movie,
+        start_delete_movie, delete_movie as admin_delete_movie,
+        show_stats, start_broadcast, process_broadcast,
+        manage_channels, start_add_channel, process_add_channel,
+        remove_channel_handler, start_add_limit, process_add_limit,
+        start_ban_user, process_ban_user, start_unban_user,
+        unban_user_handler, create_backup, export_data,
+        start_add_admin, process_add_admin, start_remove_admin,
+        remove_admin_handler
+    )
+except Exception as e:
+    print(f"Modul import xato: {e}")
+    raise
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -51,7 +64,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_id = str(user.id)
         
-        # Referal tekshiruvi - TO'G'RI INDENT BILAN
+        # Referal tekshiruvi
         if context.args and len(context.args) > 0 and context.args[0].startswith("ref"):
             referrer_id = context.args[0].replace("ref", "")
             users = get_users()
@@ -325,7 +338,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-# ==================== YORDAMCHI CALLBACK FUNKSIYALAR ====================
+# ==================== YORDAMCHI FUNKSIYALAR ====================
 
 async def show_main_menu(query, user_id: str):
     text = (
@@ -407,6 +420,7 @@ async def show_trending_list(query):
         await query.answer("Kinolar mavjud emas!", show_alert=True)
         return
     
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     text = "Top 10 kinolar:\n\n"
     keyboard = []
     for i, (code, data) in enumerate(trending, 1):
@@ -433,7 +447,6 @@ async def show_referral_info(query, user_id: str):
     await query.edit_message_text(text, reply_markup=keyboard)
 
 async def show_new_movies_list(query):
-    import operator
     movies = get_movies()
     sorted_movies = sorted(movies.items(), key=lambda x: x[1].get("added_at", ""), reverse=True)[:10]
     
@@ -546,22 +559,37 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== MAIN ====================
 
 def main():
-    if not BOT_TOKEN:
-        print("ERROR: BOT_TOKEN yo'q!")
-        return
+    import os
+    import sys
+    
+    # Environment variables ni qayta o'qish
+    env_token = os.environ.get("BOT_TOKEN", "")
+    if env_token:
+        global BOT_TOKEN
+        BOT_TOKEN = env_token
+        print(f"Token env dan o'qildi: {len(BOT_TOKEN)} ta belgi")
+    
+    if not BOT_TOKEN or len(BOT_TOKEN) < 20:
+        print("ERROR: BOT_TOKEN noto'g'ri!")
+        print(f"Mavjud env vars: {[k for k in os.environ.keys() if not k.startswith('_')]}")
+        sys.exit(1)
     
     print(f"Bot: @{BOT_USERNAME}")
     print(f"Admins: {ADMIN_IDS}")
     
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    
-    print("Bot ishga tushdi...")
-    application.run_polling(drop_pending_updates=True)
+    try:
+        application = Application.builder().token(BOT_TOKEN).build()
+        
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("cancel", cancel))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        application.add_handler(CallbackQueryHandler(button_handler))
+        
+        print("Bot ishga tushdi...")
+        application.run_polling(drop_pending_updates=True)
+    except Exception as e:
+        print(f"Bot xato: {e}")
+        raise
 
 if __name__ == "__main__":
     main()
