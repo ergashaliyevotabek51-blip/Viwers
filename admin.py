@@ -86,8 +86,7 @@ async def start_add_movie(query, context):
 
 
 async def process_add_movie(update, context):
-    """Kino qo'shish jarayoni - ANIQ ISHLAYDIGAN"""
-    # Import movies modulini ichida qilamiz
+    """Kino qo'shish jarayoni - TO'G'RI ISHLAYDIGAN"""
     try:
         from movies import add_movie as movies_add_movie
     except ImportError as e:
@@ -105,13 +104,15 @@ async def process_add_movie(update, context):
     step = user_data.get("step", "forward")
     
     print(f"DEBUG: Step = {step}")
-    print(f"DEBUG: Message text = {update.message.text if update.message.text else 'None'}")
-    print(f"DEBUG: Forward = {update.message.forward_from_chat is not None}")
+    print(f"DEBUG: Has forward = {update.message.forward_from_chat is not None}")
+    print(f"DEBUG: Has text = {update.message.text is not None}")
     
     # ========== FORWARD QABUL QILISH ==========
     if step == "forward":
-        # Forward qilinganmi tekshirish
+        # Forward qilinganmi tekshirish - TEXT emas, FORWARD tekshiriladi!
         if not update.message.forward_from_chat:
+            # Bu yerda text bo'lishi mumkin yoki bo'lmasligi mumkin
+            # Asosiy forward yo'qligi
             await update.message.reply_text(
                 "❌ <b>Iltimos, kanaldan kino forward qiling!</b>\n\n"
                 "📤 Kanaldan postni ushlab turib, shu yerga yuboring.\n\n"
@@ -120,13 +121,15 @@ async def process_add_movie(update, context):
             )
             return
         
+        # ✅ FORWARD QABUL QILINDI!
         try:
             channel_id = update.message.forward_from_chat.id
             message_id = update.message.forward_from_message_id
             
+            print(f"DEBUG: ✅ Forward qabul qilindi!")
             print(f"DEBUG: Channel ID = {channel_id}, Message ID = {message_id}")
             
-            # Bot adminligini tekshirish (ixtiyoriy)
+            # Bot adminligini tekshirish
             try:
                 chat_member = await context.bot.get_chat_member(channel_id, context.bot.id)
                 print(f"DEBUG: Bot status = {chat_member.status}")
@@ -151,7 +154,7 @@ async def process_add_movie(update, context):
             user_data["message_id"] = message_id
             user_data["step"] = "code"
             
-            # MUHIM: Xabar yuborish
+            # ✅ MUHIM: Xabar yuborish
             await update.message.reply_text(
                 "✅ <b>Kino posti qabul qilindi!</b>\n\n"
                 f"📢 Kanal ID: <code>{channel_id}</code>\n"
@@ -161,7 +164,7 @@ async def process_add_movie(update, context):
                 "❌ Bekor qilish: /cancel",
                 parse_mode='HTML'
             )
-            print("DEBUG: Kod kiritish xabari yuborildi")
+            print("DEBUG: ✅ Kod kiritish xabari yuborildi")
             return
             
         except Exception as e:
@@ -175,7 +178,18 @@ async def process_add_movie(update, context):
     
     # ========== KOD KIRITISH ==========
     elif step == "code":
-        code = update.message.text.strip().lower() if update.message.text else ""
+        # ✅ ENDI TEXT TEKSHIRILADI!
+        if not update.message.text:
+            await update.message.reply_text(
+                "❌ <b>Iltimos, matn kiriting!</b>\n\n"
+                "📝 <b>Kod</b> yozing:\n"
+                "<i>Masalan: uzb001</i>\n\n"
+                "❌ Bekor qilish: /cancel",
+                parse_mode='HTML'
+            )
+            return
+        
+        code = update.message.text.strip().lower()
         
         if not code:
             await update.message.reply_text(
@@ -209,7 +223,14 @@ async def process_add_movie(update, context):
     
     # ========== NOM KIRITISH ==========
     elif step == "name":
-        name = update.message.text.strip() if update.message.text else ""
+        if not update.message.text:
+            await update.message.reply_text(
+                "❌ <b>Iltimos, nom kiriting!</b>",
+                parse_mode='HTML'
+            )
+            return
+        
+        name = update.message.text.strip()
         
         if not name:
             await update.message.reply_text(
@@ -234,7 +255,6 @@ async def process_add_movie(update, context):
         genre = "" if genre_text.lower() == "skip" else genre_text
         
         try:
-            # Kino saqlash
             movies_add_movie(
                 user_data["code"],
                 user_data["name"],
@@ -244,7 +264,6 @@ async def process_add_movie(update, context):
                 str(update.effective_user.id)
             )
             
-            # Tozalash
             context.user_data.pop("adding_movie", None)
             
             genre_display = f"🎭 {genre}" if genre else "🎬 Belgilanmagan"
@@ -281,6 +300,7 @@ async def process_add_movie(update, context):
             parse_mode='HTML'
         )
         context.user_data.pop("adding_movie", None)
+
 
 
 # ==================== QOLGAN FUNKSiyalar ====================
