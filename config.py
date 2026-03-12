@@ -3,7 +3,7 @@ import os
 # Railway Environment Variables
 BOT_TOKEN = os.environ.get("8370792264:AAEFLn2NukQ3E63PHmAln7evLhQPBMxFP6s", "")
 BOT_USERNAME = os.environ.get("UzbekFilmTV_bot")
-ADMIN_ID = os.environ.get("ADMIN_ID", "")
+ADMIN_ID = os.environ.get("774440841", "")
 
 # ADMIN_IDS ro'yxati
 ADMIN_IDS = []
