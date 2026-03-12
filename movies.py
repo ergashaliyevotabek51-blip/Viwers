@@ -1,46 +1,29 @@
-from database import load_json,save_json
-from config import MOVIES_FILE
 import random
+from typing import List, Optional, Tuple
+from database import get_movies, save_movies
 
-def load_movies():
-    return load_json(MOVIES_FILE,{})
-
-def save_movies(data):
-    save_json(MOVIES_FILE,data)
-
-def add_movie(code,file,name,quality,duration,caption,movies):
-
-    movies[code]={
-        "file":file,
-        "name":name,
-        "quality":quality,
-        "duration":duration,
-        "caption":caption,
-        "views":0
-    }
-
-    save_movies(movies)
-
-def delete_movie(code,movies):
-
-    if code in movies:
-        del movies[code]
-        save_movies(movies)
-        return True
-
-    return False
-
-def random_movie(movies):
-
+def get_random_movie() -> Optional[Tuple[str, dict]]:
+    movies = get_movies()
     if not movies:
         return None
+    return random.choice(list(movies.items()))
 
-    return random.choice(list(movies.keys()))
+def get_trending_movies(limit: int = 10) -> List[Tuple[str, dict]]:
+    movies = get_movies()
+    sorted_movies = sorted(movies.items(), key=lambda x: x[1].get("views", 0), reverse=True)
+    return sorted_movies[:limit]
 
-def trending(movies):
+def search_movies(query: str) -> List[Tuple[str, dict]]:
+    movies = get_movies()
+    results = []
+    query_lower = query.lower()
+    for code, data in movies.items():
+        if query_lower in code.lower() or query_lower in data.get("name", "").lower():
+            results.append((code, data))
+    return results
 
-    return sorted(
-        movies.items(),
-        key=lambda x:x[1]["views"],
-        reverse=True
-    )[:10]
+def increment_movie_views(movie_code: str):
+    movies = get_movies()
+    if movie_code in movies:
+        movies[movie_code]["views"] = movies[movie_code].get("views", 0) + 1
+        save_movies(movies)
