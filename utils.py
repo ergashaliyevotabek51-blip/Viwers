@@ -1,25 +1,11 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from database import get_users, get_movies, get_channels, get_admins  # get_admins qo'shildi
+from database import get_users, get_movies, get_channels
 from config import ADMIN_IDS
 
 def is_admin(user_id: str) -> bool:
-    """Admin tekshiruvi - config VA database'dan"""
-    # 1. config.py dagi super adminlar
-    if user_id in ADMIN_IDS:
-        return True
-    
-    # 2. database'dagi qo'shilgan adminlar
-    try:
-        admins = get_admins()
-        if user_id in admins:
-            return True
-    except Exception as e:
-        print(f"is_admin xato: {e}")
-    
-    return False
+    return user_id in ADMIN_IDS
 
 def is_super_admin(user_id: str) -> bool:
-    """Faqat config.py dagi birinchi admin"""
     return ADMIN_IDS and user_id == ADMIN_IDS[0]
 
 def get_main_keyboard(user_id: str) -> InlineKeyboardMarkup:
