@@ -6,7 +6,8 @@ from telegram.ext import ContextTypes
 from database import get_users, save_users, get_movies, save_movies, get_channels, save_channels, get_admins, save_admins, USERS_FILE, MOVIES_FILE, CHANNELS_FILE
 from config import ADMIN_IDS
 
-# YANGI:
+# ==================== YANGILANGAN ADMIN TEKSHIRUVI ====================
+
 def is_admin(user_id: str) -> bool:
     """Admin tekshiruvi - config VA database'dan"""
     # 1. config.py dagi super adminlar
@@ -23,6 +24,8 @@ def is_admin(user_id: str) -> bool:
     
     return False
 
+def is_super_admin(user_id: str) -> bool:
+    return ADMIN_IDS and user_id == ADMIN_IDS[0]
 
 # ==================== ASOSIY ADMIN PANEL ====================
 
