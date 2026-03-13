@@ -494,3 +494,26 @@ def save_requests(requests: dict):
 # Initialize
 if __name__ == "__main__":
     init_database()
+
+def is_admin_db(user_id: str) -> bool:
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM admins WHERE user_id = %s", (str(user_id),))
+        result = cursor.fetchone()
+        cursor.close()
+        return result is not None
+    except:
+        return False
+
+def is_super_admin_db(user_id: str) -> bool:
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT role FROM admins WHERE user_id = %s", (str(user_id),))
+        result = cursor.fetchone()
+        cursor.close()
+        return result is not None and result[0] == 'super_admin'
+    except:
+        return False
+
