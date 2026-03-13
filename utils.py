@@ -1,12 +1,25 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from database import get_users, get_movies, get_channels
+from database import get_users, get_movies, get_channels, is_admin_db, is_super_admin_db
 from config import ADMIN_IDS
 
 def is_admin(user_id: str) -> bool:
-    return user_id in ADMIN_IDS
+    """Config va database'dan admin tekshirish"""
+    # Avval config'dan tekshirish
+    if user_id in ADMIN_IDS:
+        return True
+    # Keyin database'dan tekshirish
+    return is_admin_db(user_id)
 
 def is_super_admin(user_id: str) -> bool:
-    return ADMIN_IDS and user_id == ADMIN_IDS[0]
+    """Config va database'dan super admin tekshirish"""
+    # Config'dagi birinchi ID super admin
+    if ADMIN_IDS and user_id == ADMIN_IDS[0]:
+        return True
+    # Database'dan tekshirish
+    return is_super_admin_db(user_id)
+
+# ... qolgan funksiyalar o'zgarishsiz qoladi
+
 
 def get_main_keyboard(user_id: str) -> InlineKeyboardMarkup:
     """Asosiy menyu - Zamonaviy dizayn"""
