@@ -64,7 +64,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_banned(user_id):
             await update.message.reply_text(
                 "🚫 <b>Siz botdan bloklangansiz!</b>\n\n"
-                "Admin bilan bog'laning: @admin",
+                "Admin bilan bog'laning: @@Qalbi_Dunyo_bot",
                 parse_mode='HTML'
             )
             return
