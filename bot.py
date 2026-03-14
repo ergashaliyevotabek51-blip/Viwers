@@ -28,7 +28,8 @@ from utils import (
 )
 from admin import (
     show_admin_panel, start_add_movie, process_add_movie,
-    start_delete_movie, delete_movie as admin_delete_movie,
+    start_delete_movie, process_delete_movie_callback,
+    confirm_delete_movie, final_delete_movie, delete_movie,
     show_stats, start_broadcast, process_broadcast,
     manage_channels, start_add_channel, process_add_channel,
     remove_channel_handler, start_add_limit, process_add_limit,
@@ -318,9 +319,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "add_movie":
             await start_add_movie(query, context)
         elif data == "delete_movie":
-            await start_delete_movie(query)
+            await start_delete_movie(query, context, page=1)
         elif data.startswith("del_movie_"):
-            await admin_delete_movie(query, data.replace("del_movie_", ""))
+            # Eski o'chirish - endi process_delete_movie_callback orqali ishlaydi
+            pass
         elif data == "stats":
             await show_stats(query)
         elif data == "top_movies":
@@ -638,6 +640,13 @@ def main():
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("cancel", cancel))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+        # Kino o'chirish callbacklari (pagination bilan)
+        application.add_handler(CallbackQueryHandler(
+            lambda u, c: process_delete_movie_callback(u.callback_query, c),
+            pattern="^(delete_movie_page_|del_movie_|confirm_delete_)"
+        ))
+
         application.add_handler(CallbackQueryHandler(button_handler))
         
         print("Bot ishga tushdi...")
