@@ -906,3 +906,19 @@ async def remove_admin_handler(query, admin_id: str):
         await query.answer("✅ Admin o'chirildi!", show_alert=True)
 
     await start_remove_admin(query)
+
+
+# ==================== ESKI KOD BILAN MOSLIK ====================
+
+async def delete_movie(query, movie_code: str):
+    """Eski kod bilan moslik uchun - kino o'chirish"""
+    # Bu funksiya eski callbacklar uchun saqlanib qolgan
+    # Aslida final_delete_movie ni chaqiradi
+    from movies import delete_movie as remove_movie
+
+    if remove_movie(movie_code):
+        await query.answer("✅ Kino o'chirildi!", show_alert=True)
+        # O'chirgandan keyin ro'yxatni yangilash
+        await start_delete_movie(query, None, page=1)
+    else:
+        await query.answer("❌ Xatolik yuz berdi!", show_alert=True)
