@@ -12,6 +12,9 @@ def is_admin(user_id: str) -> bool:
 def is_super_admin(user_id: str) -> bool:
     return ADMIN_IDS and user_id == ADMIN_IDS[0]
 
+# Yangi qator uchun o'zgaruvchi
+NL = chr(10)  # \n ning ekvivalenti
+
 # ==================== ASOSIY ADMIN PANEL ====================
 
 async def show_admin_panel(query, user_id: str):
@@ -41,29 +44,18 @@ async def show_admin_panel(query, user_id: str):
         crown = "👮"
         color = "🔵"
 
+    # f-string ichida yangi qator ishlatmaymiz, alohida qatorlarda yozamiz
     text = (
-        f"{crown} <b>{role}</b> {crown}
-"
-        f"➖➖➖➖➖➖➖➖➖➖
-"
-        f"📅 <b>Sana:</b> <code>{today}</code>
-
-"
-        f"{color} <b>📊 ASOSIY STATISTIKA</b>
-"
-        f"├ 👥 Foydalanuvchilar: <code>{total_users}</code>
-"
-        f"├ 🎬 Kinolar: <code>{total_movies}</code>
-"
-        f"├ 👁 Ko'rishlar: <code>{total_views}</code>
-"
-        f"├ 📢 Kanallar: <code>{total_channels}</code>
-"
-        f"├ 👮 Adminlar: <code>{total_admins}</code>
-"
-        f"└ 🚫 Bloklangan: <code>{banned}</code>
-
-"
+        f"{crown} <b>{role}</b> {crown}" + NL +
+        f"➖➖➖➖➖➖➖➖➖➖" + NL +
+        f"📅 <b>Sana:</b> <code>{today}</code>" + NL + NL +
+        f"{color} <b>📊 ASOSIY STATISTIKA</b>" + NL +
+        f"├ 👥 Foydalanuvchilar: <code>{total_users}</code>" + NL +
+        f"├ 🎬 Kinolar: <code>{total_movies}</code>" + NL +
+        f"├ 👁 Ko'rishlar: <code>{total_views}</code>" + NL +
+        f"├ 📢 Kanallar: <code>{total_channels}</code>" + NL +
+        f"├ 👮 Adminlar: <code>{total_admins}</code>" + NL +
+        f"└ 🚫 Bloklangan: <code>{banned}</code>" + NL + NL +
         f"⚡️ <i>Quyidagi tugmalardan foydalaning:</i>"
     )
 
@@ -81,25 +73,17 @@ async def start_add_movie(query, context):
     context.user_data.pop("adding_movie", None)
     context.user_data["adding_movie"] = {"step": "link"}
 
-    await query.edit_message_text(
-        "➕ <b>YANGI KINO QO'SHISH</b>
-
-"
-        "🔗 <b>Telegram post linkini yuboring:</b>
-
-"
-        "<i>Misollar:</i>
-"
-        "<code>https://t.me/c/1234567890/42</code>
-"
-        "<code>https://t.me/mychannel/42</code>
-"
-        "<code>https://t.me/mychannel/42?single</code>
-
-"
-        "❌ Bekor qilish: /cancel",
-        parse_mode='HTML'
+    text = (
+        "➕ <b>YANGI KINO QO'SHISH</b>" + NL + NL +
+        "🔗 <b>Telegram post linkini yuboring:</b>" + NL + NL +
+        "<i>Misollar:</i>" + NL +
+        "<code>https://t.me/c/1234567890/42</code>" + NL +
+        "<code>https://t.me/mychannel/42</code>" + NL +
+        "<code>https://t.me/mychannel/42?single</code>" + NL + NL +
+        "❌ Bekor qilish: /cancel"
     )
+
+    await query.edit_message_text(text, parse_mode='HTML')
 
 
 async def process_add_movie(update, context):
@@ -126,13 +110,9 @@ async def process_add_movie(update, context):
 
         if not text.startswith('https://t.me/'):
             await update.message.reply_text(
-                "❌ <b>Noto'g'ri link!</b>
-
-"
-                "<i>To'g'ri format:</i>
-"
-                "<code>https://t.me/c/1234567890/42</code>
-"
+                "❌ <b>Noto'g'ri link!</b>" + NL + NL +
+                "<i>To'g'ri format:</i>" + NL +
+                "<code>https://t.me/c/1234567890/42</code>" + NL +
                 "<code>https://t.me/kanal_nomi/42</code>",
                 parse_mode='HTML'
             )
@@ -178,11 +158,8 @@ async def process_add_movie(update, context):
                 print(f"Tekshirish xatosi: {e}")
                 # Ogohlantirish bilan davom etamiz
                 await update.message.reply_text(
-                    f"⚠️ <b>Eslatma:</b> Xabarni tekshirib bo'lmadi
-"
-                    f"<code>{e}</code>
-
-"
+                    f"⚠️ <b>Eslatma:</b> Xabarni tekshirib bo'lmadi" + NL +
+                    f"<code>{e}</code>" + NL + NL +
                     f"Davom etish uchun <b>ha</b> yozing yoki /cancel",
                     parse_mode='HTML'
                 )
@@ -198,16 +175,10 @@ async def process_add_movie(update, context):
             user_data["step"] = "code"
 
             await update.message.reply_text(
-                "✅ <b>Link qabul qilindi!</b>
-
-"
-                f"📢 Kanal: <code>{channel_id}</code>
-"
-                f"🆔 Xabar: <code>{message_id}</code>
-
-"
-                "📝 <b>Kod kiriting:</b>
-"
+                "✅ <b>Link qabul qilindi!</b>" + NL + NL +
+                f"📢 Kanal: <code>{channel_id}</code>" + NL +
+                f"🆔 Xabar: <code>{message_id}</code>" + NL + NL +
+                "📝 <b>Kod kiriting:</b>" + NL +
                 "<i>Masalan: uzb001</i>",
                 parse_mode='HTML'
             )
@@ -216,14 +187,9 @@ async def process_add_movie(update, context):
         except Exception as e:
             print(f"Link tahlil xatosi: {e}")
             await update.message.reply_text(
-                f"❌ <b>Linkni tushunib bo'lmadi!</b>
-
-"
-                f"<code>{e}</code>
-
-"
-                f"🔗 <b>To'g'ri link yuboring:</b>
-"
+                f"❌ <b>Linkni tushunib bo'lmadi!</b>" + NL + NL +
+                f"<code>{e}</code>" + NL + NL +
+                f"🔗 <b>To'g'ri link yuboring:</b>" + NL +
                 f"<code>https://t.me/c/1234567890/42</code>",
                 parse_mode='HTML'
             )
@@ -239,9 +205,7 @@ async def process_add_movie(update, context):
             del user_data["temp_message_id"]
 
             await update.message.reply_text(
-                "✅ <b>Davom etamiz!</b>
-
-"
+                "✅ <b>Davom etamiz!</b>" + NL + NL +
                 "📝 <b>Kod kiriting:</b>",
                 parse_mode='HTML'
             )
@@ -262,11 +226,8 @@ async def process_add_movie(update, context):
         if code in movies:
             movie_name = movies[code].get('name', 'Nomalum')
             await update.message.reply_text(
-                f"❌ <b>Bu kod mavjud!</b>
-
-"
-                f"🎬 {movie_name}
-"
+                f"❌ <b>Bu kod mavjud!</b>" + NL + NL +
+                f"🎬 {movie_name}" + NL +
                 f"📝 Boshqa kod:",
                 parse_mode='HTML'
             )
@@ -276,9 +237,7 @@ async def process_add_movie(update, context):
         user_data["step"] = "name"
 
         await update.message.reply_text(
-            f"✅ Kod: <code>{code}</code>
-
-"
+            f"✅ Kod: <code>{code}</code>" + NL + NL +
             "🎬 <b>Film nomi:</b>",
             parse_mode='HTML'
         )
@@ -294,9 +253,7 @@ async def process_add_movie(update, context):
         user_data["step"] = "genre"
 
         await update.message.reply_text(
-            f"✅ Nomi: <b>{text}</b>
-
-"
+            f"✅ Nomi: <b>{text}</b>" + NL + NL +
             "🎭 <b>Janr</b> (yo'q bo'lsa <code>skip</code>):",
             parse_mode='HTML'
         )
@@ -319,17 +276,11 @@ async def process_add_movie(update, context):
             context.user_data.pop("adding_movie", None)
 
             success_text = (
-                f"✅ <b>KINO QO'SHILDI!</b>
-
-"
-                f"🎬 <b>Kod:</b> <code>{user_data['code']}</code>
-"
-                f"📝 <b>Nomi:</b> {user_data['name']}
-"
-                f"🎭 <b>Janr:</b> {genre or 'Belgilanmagan'}
-"
-                f"🔗 <b>Link:</b> {user_data.get('link', 'Nomalum')}
-"
+                f"✅ <b>KINO QO'SHILDI!</b>" + NL + NL +
+                f"🎬 <b>Kod:</b> <code>{user_data['code']}</code>" + NL +
+                f"📝 <b>Nomi:</b> {user_data['name']}" + NL +
+                f"🎭 <b>Janr:</b> {genre or 'Belgilanmagan'}" + NL +
+                f"🔗 <b>Link:</b> {user_data.get('link', 'Nomalum')}" + NL +
                 f"📅 <b>Sana:</b> {datetime.now().strftime('%d.%m.%Y')}"
             )
 
@@ -443,16 +394,15 @@ async def start_delete_movie(query, context, page: int = 1):
     # Orqaga tugmasi
     keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="admin_panel")])
 
+    text = (
+        "➖ <b>KINO O'CHIRISH</b>" + NL + NL +
+        f"📄 <b>Sahifa:</b> <code>{page}</code> / <code>{total_pages}</code>" + NL +
+        f"📊 <b>Jami kinolar:</b> <code>{total_movies}</code> ta" + NL + NL +
+        "🎬 <i>O'chirish uchun kinoni tanlang:</i>"
+    )
+
     await query.edit_message_text(
-        "➖ <b>KINO O'CHIRISH</b>
-
-"
-        f"📄 <b>Sahifa:</b> <code>{page}</code> / <code>{total_pages}</code>
-"
-        f"📊 <b>Jami kinolar:</b> <code>{total_movies}</code> ta
-
-"
-        "🎬 <i>O'chirish uchun kinoni tanlang:</i>",
+        text,
         reply_markup=InlineKeyboardMarkup(keyboard), 
         parse_mode='HTML'
     )
@@ -499,7 +449,7 @@ async def confirm_delete_movie(query, context, movie_code: str, page: int = 1):
         return
 
     movie_data = movies[movie_code]
-    name = movie_data.get('name', 'Noma'lum')
+    name = movie_data.get('name', "Noma'lum")
     views = movie_data.get('views', 0)
 
     keyboard = [
@@ -507,21 +457,17 @@ async def confirm_delete_movie(query, context, movie_code: str, page: int = 1):
         [InlineKeyboardButton("❌ Yo'q, bekor qilish", callback_data=f"delete_movie_page_{page}")]
     ]
 
+    text = (
+        f"⚠️ <b>O'CHIRISHNI TASDIQLANG</b>" + NL + NL +
+        f"🎬 <b>Kino:</b> {name}" + NL +
+        f"📝 <b>Kod:</b> <code>{movie_code}</code>" + NL +
+        f"👁 <b>Ko'rishlar:</b> {views}" + NL + NL +
+        f"❗ <b>Diqqat:</b> Bu amalni qaytarib bo'lmaydi!" + NL + NL +
+        f"Rostdan ham o'chirmoqchimisiz?"
+    )
+
     await query.edit_message_text(
-        f"⚠️ <b>O'CHIRISHNI TASDIQLANG</b>
-
-"
-        f"🎬 <b>Kino:</b> {name}
-"
-        f"📝 <b>Kod:</b> <code>{movie_code}</code>
-"
-        f"👁 <b>Ko'rishlar:</b> {views}
-
-"
-        f"❗ <b>Diqqat:</b> Bu amalni qaytarib bo'lmaydi!
-
-"
-        f"Rostdan ham o'chirmoqchimisiz?",
+        text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='HTML'
     )
@@ -563,21 +509,13 @@ async def show_stats(query):
     banned = sum(1 for u in users.values() if u.get("banned"))
 
     text = (
-        f"📊 <b>STATISTIKA</b>
-"
-        f"➖➖➖➖➖➖➖➖➖➖
-
-"
-        f"👥 Foydalanuvchilar: <code>{total_users}</code>
-"
-        f"🎬 Kinolar: <code>{total_movies}</code>
-"
-        f"👁 Ko'rishlar: <code>{total_views}</code>
-"
-        f"📢 Kanallar: <code>{len(channels)}</code>
-"
-        f"👮 Adminlar: <code>{len(admins)}</code>
-"
+        f"📊 <b>STATISTIKA</b>" + NL +
+        f"➖➖➖➖➖➖➖➖➖➖" + NL + NL +
+        f"👥 Foydalanuvchilar: <code>{total_users}</code>" + NL +
+        f"🎬 Kinolar: <code>{total_movies}</code>" + NL +
+        f"👁 Ko'rishlar: <code>{total_views}</code>" + NL +
+        f"📢 Kanallar: <code>{len(channels)}</code>" + NL +
+        f"👮 Adminlar: <code>{len(admins)}</code>" + NL +
         f"🚫 Bloklangan: <code>{banned}</code>"
     )
 
@@ -597,16 +535,13 @@ async def start_broadcast(query, context):
 
     context.user_data["broadcasting"] = True
 
-    await query.edit_message_text(
-        "📢 <b>BROADCAST</b>
-
-"
-        "Yuboriladigan xabarni kiriting:
-
-"
-        "❌ Bekor qilish: /cancel",
-        parse_mode='HTML'
+    text = (
+        "📢 <b>BROADCAST</b>" + NL + NL +
+        "Yuboriladigan xabarni kiriting:" + NL + NL +
+        "❌ Bekor qilish: /cancel"
     )
+
+    await query.edit_message_text(text, parse_mode='HTML')
 
 async def process_broadcast(update, context):
     if not context.user_data.get("broadcasting"):
@@ -628,11 +563,8 @@ async def process_broadcast(update, context):
             failed += 1
 
     await status.edit_text(
-        f"✅ <b>Yakunlandi!</b>
-
-"
-        f"✓ Muvaffaqiyatli: <code>{sent}</code>
-"
+        f"✅ <b>Yakunlandi!</b>" + NL + NL +
+        f"✓ Muvaffaqiyatli: <code>{sent}</code>" + NL +
         f"✗ Xatolik: <code>{failed}</code>",
         parse_mode='HTML'
     )
@@ -647,13 +579,9 @@ async def manage_channels(query):
     channels = get_channels()
 
     if not channels:
-        text = "🔒 <b>MAJBURIY OBUNA</b>
-
-📭 Kanallar yo'q"
+        text = "🔒 <b>MAJBURIY OBUNA</b>" + NL + NL + "📭 Kanallar yo'q"
     else:
-        text = f"🔒 <b>MAJBURIY OBUNA</b>
-
-📢 Jami: <code>{len(channels)}</code> ta"
+        text = f"🔒 <b>MAJBURIY OBUNA</b>" + NL + NL + f"📢 Jami: <code>{len(channels)}</code> ta"
 
     from utils import get_channels_keyboard
     await query.edit_message_text(text, reply_markup=get_channels_keyboard(), parse_mode='HTML')
@@ -665,18 +593,14 @@ async def start_add_channel(query, context):
 
     context.user_data["adding_channel"] = True
 
-    await query.edit_message_text(
-        "➕ <b>KANAL QO'SHISH</b>
-
-"
-        "Username yoki link yuboring:
-"
-        "<i>@channel yoki https://t.me/channel</i>
-
-"
-        "❌ Bekor qilish: /cancel",
-        parse_mode='HTML'
+    text = (
+        "➕ <b>KANAL QO'SHISH</b>" + NL + NL +
+        "Username yoki link yuboring:" + NL +
+        "<i>@channel yoki https://t.me/channel</i>" + NL + NL +
+        "❌ Bekor qilish: /cancel"
     )
+
+    await query.edit_message_text(text, parse_mode='HTML')
 
 async def process_add_channel(update, context):
     if not context.user_data.get("adding_channel"):
@@ -703,11 +627,8 @@ async def process_add_channel(update, context):
         del context.user_data["adding_channel"]
 
         await update.message.reply_text(
-            f"✅ <b>Kanal qo'shildi!</b>
-
-"
-            f"📢 {chat.title}
-"
+            f"✅ <b>Kanal qo'shildi!</b>" + NL + NL +
+            f"📢 {chat.title}" + NL +
             f"🆔 <code>{chat.id}</code>",
             parse_mode='HTML'
         )
@@ -732,16 +653,13 @@ async def start_add_limit(query, context):
 
     context.user_data["adding_limit"] = {"step": "user"}
 
-    await query.edit_message_text(
-        "💠 <b>LIMIT QO'SHISH</b>
-
-"
-        "Foydalanuvchi ID:
-
-"
-        "❌ Bekor qilish: /cancel",
-        parse_mode='HTML'
+    text = (
+        "💠 <b>LIMIT QO'SHISH</b>" + NL + NL +
+        "Foydalanuvchi ID:" + NL + NL +
+        "❌ Bekor qilish: /cancel"
     )
+
+    await query.edit_message_text(text, parse_mode='HTML')
 
 async def process_add_limit(update, context):
     from users import add_limit
@@ -785,16 +703,13 @@ async def start_ban_user(query, context):
 
     context.user_data["banning_user"] = True
 
-    await query.edit_message_text(
-        "👤 <b>BAN</b>
-
-"
-        "Foydalanuvchi ID:
-
-"
-        "❌ Bekor qilish: /cancel",
-        parse_mode='HTML'
+    text = (
+        "👤 <b>BAN</b>" + NL + NL +
+        "Foydalanuvchi ID:" + NL + NL +
+        "❌ Bekor qilish: /cancel"
     )
+
+    await query.edit_message_text(text, parse_mode='HTML')
 
 async def process_ban_user(update, context):
     from users import ban_user
@@ -842,12 +757,8 @@ async def start_unban_user(query):
     keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="admin_panel")])
 
     await query.edit_message_text(
-        "♻️ <b>UNBAN</b>
-
-"
-        f"Jami: <code>{len(banned)}</code>
-
-"
+        "♻️ <b>UNBAN</b>" + NL + NL +
+        f"Jami: <code>{len(banned)}</code>" + NL + NL +
         "Tanlang:",
         reply_markup=InlineKeyboardMarkup(keyboard), 
         parse_mode='HTML'
@@ -873,9 +784,7 @@ async def create_backup(query):
 
         from utils import get_admin_keyboard
         await query.edit_message_text(
-            f"📦 <b>Backup yaratildi!</b>
-
-"
+            f"📦 <b>Backup yaratildi!</b>" + NL + NL +
             f"📁 <code>{backup_dir}</code>",
             reply_markup=get_admin_keyboard(str(query.from_user.id)),
             parse_mode='HTML'
@@ -905,9 +814,7 @@ async def export_data(query):
 
     from utils import get_admin_keyboard
     await query.edit_message_text(
-        f"📤 <b>Export yakunlandi!</b>
-
-"
+        f"📤 <b>Export yakunlandi!</b>" + NL + NL +
         f"📁 Fayllar: <code>{sent}</code>",
         reply_markup=get_admin_keyboard(str(query.from_user.id)),
         parse_mode='HTML'
@@ -922,16 +829,13 @@ async def start_add_admin(query, context):
 
     context.user_data["adding_admin"] = True
 
-    await query.edit_message_text(
-        "👑 <b>ADMIN QO'SHISH</b>
-
-"
-        "Yangi admin ID:
-
-"
-        "❌ Bekor qilish: /cancel",
-        parse_mode='HTML'
+    text = (
+        "👑 <b>ADMIN QO'SHISH</b>" + NL + NL +
+        "Yangi admin ID:" + NL + NL +
+        "❌ Bekor qilish: /cancel"
     )
+
+    await query.edit_message_text(text, parse_mode='HTML')
 
 async def process_add_admin(update, context):
     if not context.user_data.get("adding_admin"):
@@ -987,9 +891,7 @@ async def start_remove_admin(query):
     keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="admin_panel")])
 
     await query.edit_message_text(
-        "👑 <b>ADMIN O'CHIRISH</b>
-
-"
+        "👑 <b>ADMIN O'CHIRISH</b>" + NL + NL +
         "Tanlang:",
         reply_markup=InlineKeyboardMarkup(keyboard), 
         parse_mode='HTML'
